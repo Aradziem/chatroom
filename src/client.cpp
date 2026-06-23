@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
 		}
 argument_end:
 	}
-	client c("127.0.0.1", 6666);
+	client c(ip, 6666);
 	while(1) {
 		display(&c);
 		c.send_message(read_message());
