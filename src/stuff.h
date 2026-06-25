@@ -45,6 +45,7 @@ class client_connection : public connection
 struct message
 {
 	time_t send_time;
+	uint32_t ms;
 	char str[64];
 };
 
@@ -55,7 +56,7 @@ class client
 	public:
 		client(string server_ip, int server_port);
 		void send_message(message msg);
-		vector<message> messages_since (time_t timestamp);
+		vector<message> messages_since (time_t timestamp, uint32_t ms);
 };
 
 class server
@@ -66,6 +67,7 @@ class server
 	void handle_s ();
 	void handle_r();
 	public:
+
 		server(int port) : conn(port) { };
 
 		void handle();

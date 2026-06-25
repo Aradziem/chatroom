@@ -125,13 +125,14 @@ void client::send_message(message msg)
 	conn.write(sizeof(msg),&msg);
 }
 
-vector<message> client::messages_since (time_t timestamp)
+vector<message> client::messages_since (time_t timestamp, uint32_t ms)
 {
 	client_connection conn(ip,port);
 	char message_type = 'r';
 
 	conn.write(1,&message_type);
 	conn.write(sizeof(timestamp),&timestamp);
+	conn.write(4,&ms);
 
 	int message_number;
 	conn.read(sizeof(message_number),&message_number);
@@ -155,13 +156,15 @@ void server::handle_s ()
 void server::handle_r()
 {
 	time_t timestamp;
+	uint32_t ms;
 	int first_to_send =-1;
 
 	conn.read(sizeof(time_t),&timestamp);
+	conn.read(4,&ms);
 
 	for(int i = 0 ; i < messages.size(); i++)
 	{
-		if(messages[i].send_time >= timestamp)
+		if(messages[i].send_time > timestamp || (messages[i].send_time == timestamp && messages[i].ms >= ms))
 		{
 			first_to_send = i;
 			break;
