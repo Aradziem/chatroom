@@ -47,14 +47,16 @@ struct message
 	time_t send_time;
 	uint32_t ms;
 	char str[64];
+    char nick[16];
 };
 
 class client
 {
+    char nick[16];
 	string ip;
 	int port;
 	public:
-		client(string server_ip, int server_port);
+		client(string server_ip, int server_port, char *nick);
 		void send_message(message msg);
 		vector<message> messages_since (time_t timestamp, uint32_t ms);
 };

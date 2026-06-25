@@ -110,14 +110,16 @@ void client_connection::write(int bytes, void* buffer)
 	::write(fd, buffer, bytes);
 }
 
-client::client(string server_ip, int server_port)
+client::client(string server_ip, int server_port, char *nick)
 {
+	strcpy(this->nick, nick);
 	ip = server_ip;
 	port = server_port;
 }
 
 void client::send_message(message msg)
 {
+	strcpy(msg.nick, nick);
 	client_connection conn(ip,port);
 	char message_type = 's';
 

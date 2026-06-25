@@ -1,8 +1,12 @@
 #include "stuff.h"
 #include <termios.h>
 #include <poll.h>
+#include <stdio.h>
+
+#define CONFIG_FILE "/.chatroomrc"
 
 struct termios term, orig_term;
+char nick[16] = "Anonymous";
 
 void cleanup(void) {
 	tcsetattr(STDIN_FILENO, 0, &orig_term);
@@ -27,7 +31,7 @@ void display(client* c)
 		for(int i = 0; i< messages.size();i++)
 		{
 			printf("\r");
-			cout<< messages[i].send_time << ": " << messages[i].str<<'\n'; 
+			cout<< messages[i].nick << ": " << messages[i].str<<'\n'; 
 		}
 		usleep(100000);
 	}
@@ -41,7 +45,7 @@ message read_message()
 	char c;
 	struct pollfd pfd;
 
-	printf("\ryou: ");
+	printf("\r%s: ", msg.nick);
 
 	pfd.fd = STDIN_FILENO;
 	pfd.events = POLLIN;
@@ -65,7 +69,7 @@ message read_message()
 				break;
 			}
 		}
-		printf("\ryou: %.*s\033[0K", idx, msg.str);
+		printf("\r%s: %.*s\033[0K", nick, idx, msg.str);
 		fflush(stdout);
 	}
 
@@ -97,7 +101,24 @@ int main(int argc, char **argv) {
 		}
 argument_end:
 	}
-	client c(ip, 6666);
+
+	char *home = getenv("HOME");
+	if(home) {
+		char *config_path = new char[strlen(home) + sizeof(CONFIG_FILE)];
+		if(config_path) {
+			strcpy(config_path, home);
+			strcat(config_path, CONFIG_FILE);
+			FILE *config = fopen(config_path, "r");
+			if(config) {
+				fscanf(config, "%16[^\n]", nick);
+				char newline;
+				fscanf(config, "%c", &newline);
+			}
+		}
+		delete[] config_path;
+	}
+
+	client c(ip, 6666,nick);
 	pid_t pid = fork();
 	if(pid < 0) {
 		cerr << "fork error\n";
