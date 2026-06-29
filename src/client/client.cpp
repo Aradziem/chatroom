@@ -3,16 +3,16 @@
 #include "client.h"
 #include "client/client-connection.h"
 
-client::client(std::string server_ip, int server_port, char *nick)
+client::client(std::string server_ip, int server_port, struct username nick)
 {
-	strcpy(this->nick, nick);
+	un = nick;
 	ip = server_ip;
 	port = server_port;
 }
 
 void client::send_message(message msg)
 {
-	strcpy(msg.nick, nick);
+	msg.un = un;
 	client_connection conn(ip,port);
 	char message_type = 's';
 

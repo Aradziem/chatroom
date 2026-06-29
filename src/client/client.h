@@ -7,14 +7,15 @@
 #include <vector>
 
 #include "common/message.h"
+#include "common/username.h"
 
 class client
 {
-    char nick[16];
+	struct username un;
 	std::string ip;
 	int port;
 public:
-	client(std::string server_ip, int server_port, char *nick);
+	client(std::string server_ip, int server_port, struct username nick);
 	void send_message(message msg);
 	std::vector<message> messages_since (time_t timestamp, uint32_t ms);
 };
