@@ -4,15 +4,18 @@
 #include <termios.h>
 #include <poll.h>
 #include <stdio.h>
+#include <map>
+#include <fstream>
 
 #include "client/client.h"
+#include "common/username.h"
 
 using namespace std;
 
 #define CONFIG_FILE "/.chatroomrc"
 
 struct termios term, orig_term;
-char nick[16] = "Anonymous";
+struct username nick;
 
 void cleanup(void) {
 	tcsetattr(STDIN_FILENO, 0, &orig_term);
@@ -37,7 +40,7 @@ void display(client* c)
 		for(long unsigned int i = 0; i< messages.size();i++)
 		{
 			printf("\r");
-			cout<< messages[i].nick << ": " << messages[i].str<<'\n'; 
+			cout<< username_pretty(messages[i].un) << ": " << messages[i].str<<'\n'; 
 		}
 		usleep(100000);
 	}
@@ -51,7 +54,8 @@ message read_message()
 	char c;
 	struct pollfd pfd;
 
-	printf("\r%s: ", msg.nick);
+	printf("\r");
+	cout << username_pretty(nick) << ": ";
 
 	pfd.fd = STDIN_FILENO;
 	pfd.events = POLLIN;
@@ -76,7 +80,9 @@ message read_message()
 				break;
 			}
 		}
-		printf("\r%s: %.*s\033[0K", nick, idx, msg.str);
+		printf("\r");
+		cout << username_pretty(nick) << ": ";
+		printf("%.*s\033[0K", idx, msg.str);
 		fflush(stdout);
 	}
 
@@ -87,7 +93,36 @@ send:
 	return msg;
 }
 
+std::map<std::string, std::string> config()
+{
+	std::map<std::string, std::string> m;
+	char *home = getenv("HOME");
+	if(home) {
+		char *config_path = new char[strlen(home) + sizeof(CONFIG_FILE)];
+		if(config_path) {
+			strcpy(config_path, home);
+			strcat(config_path, CONFIG_FILE);
+			std::ifstream config(config_path);
+			if(config.is_open()) {
+				std::string ln;
+				while(std::getline(config, ln)) {
+					if(ln[0] == '#') continue;
+					auto d = ln.find('=');
+					if(d != std::string::npos) {
+						m[ln.substr(0, d)] = ln.substr(d+1);
+					}
+				}
+			}
+		}
+		delete[] config_path;
+	}
+
+	return m;
+}
+
 int main(int argc, char **argv) {
+	std::ios::sync_with_stdio(true);
+
 	char const *ip = "127.0.0.1";
 	for(int i = 1; i < argc; ++i) {
 		if(argv[i][0] == '-') {
@@ -109,26 +144,12 @@ int main(int argc, char **argv) {
 argument_end:
 	}
 
-	char *home = getenv("HOME");
-	if(home) {
-		char *config_path = new char[strlen(home) + sizeof(CONFIG_FILE)];
-		if(config_path) {
-			strcpy(config_path, home);
-			strcat(config_path, CONFIG_FILE);
-			FILE *config = fopen(config_path, "r");
-			if(config) {
-				if(!fscanf(config, "%16[^\n]", nick))
-				{
-					strcpy(nick, "Anonymous");
-				}
-				char newline;
-				ignore = fscanf(config, "%c", &newline);//return isn't important here
-			}
-		}
-		delete[] config_path;
-	}
+	std::string raw_nick = "Anonymous";
+	auto conf = config();
+	if(conf.contains("nick")) raw_nick = conf["nick"];
+	nick = un_from_str(raw_nick);
 
-	client c(ip, 6666,nick);
+	client c(ip, 6666, nick);
 	pid_t pid = fork();
 	if(pid < 0) {
 		cerr << "fork error\n";
