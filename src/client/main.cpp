@@ -155,7 +155,6 @@ argument_end:
 	if(!conf.contains("ip")) conf["ip"] = "127.0.0.1";
 
 	std::string raw_nick = "Anonymous";
-	auto conf = config();
 	if(conf.contains("nick")) raw_nick = conf["nick"];
 	nick = un_from_str(raw_nick);
 
@@ -172,7 +171,7 @@ argument_end:
 		save_path = "/tmp/chatroom-msgs-client";
 	}
 
-	client c(ip, 6666, nick, save_path);
+	client c(conf["ip"], 6666, nick, save_path);
 	pc = &c;
 	pid_t pid = fork();
 	if(pid < 0) {
