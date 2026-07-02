@@ -128,13 +128,16 @@ int main(int argc, char **argv) {
 		if(argv[i][0] == '-') {
 			for(int j = 1; argv[i][j]; ++j) {
 				switch(argv[i][j]) {
-					case 'i':
-						if(i + 1 >= argc) {
-							cerr << "expected -i <ip>\n";
-							exit(1);
-						}
-						conf["ip"] = argv[i+1];
+#define ARG_OPT(OPT, STR) \
+					case OPT: \
+						if(i + 1 >= argc) { \
+							cerr << "expected -" << OPT << " <" << STR << ">\n"; \
+							exit(1); \
+						} \
+						conf[STR] = argv[i+1]; \
 						goto argument_end;
+					ARG_OPT('i', "ip");
+					ARG_OPT('u', "nick");
 					default:
 						cerr << "unknown -" << argv[i][j] << '\n';
 						exit(1);
