@@ -5,36 +5,26 @@ void server::handle_s ()
 	message msg;
 
 	conn.read(sizeof(msg),&msg);
-	messages.push_back(msg);
+	msg.id = msgs.msgs.size() + 1;
+	msgs.register_msg(msg);
+	conn.write(sizeof(msg_id), &msg.id);
 }
 
 void server::handle_r()
 {
-	time_t timestamp;
-	uint32_t ms;
-	int first_to_send =-1;
+	msg_id first_id;
+	std::map<msg_id, struct message>::iterator it;
+	unsigned int i, num;
 
-	conn.read(sizeof(time_t),&timestamp);
-	conn.read(4,&ms);
+	conn.read(sizeof(msg_id), &first_id);
 
-	for(unsigned long int i = 0 ; i < messages.size(); i++)
-	{
-		if(messages[i].send_time > timestamp || (messages[i].send_time == timestamp && messages[i].ms >= ms))
-		{
-			first_to_send = i;
-			break;
-		}
-	}
-	int num_messages = messages.size() - first_to_send;
-	if(first_to_send == -1)
-	{
-		num_messages = 0;
-	}
+	it = msgs.msgs.upper_bound(first_id);
+	num = std::distance(it, msgs.msgs.end());
+	conn.write(sizeof(unsigned int), &num);
 
-	conn.write(sizeof(num_messages), &num_messages);
-	for(int i = 0; i< num_messages;i++)
+	for(i = 0; i< num; ++i, ++it)
 	{
-		conn.write(sizeof(message),&messages[first_to_send+i]);
+		conn.write(sizeof(struct message), &it->second);
 	}
 }
 

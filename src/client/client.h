@@ -8,6 +8,7 @@
 
 #include "common/message.h"
 #include "common/username.h"
+#include "common/msg-storage.h"
 
 class client
 {
@@ -15,9 +16,13 @@ class client
 	std::string ip;
 	int port;
 public:
-	client(std::string server_ip, int server_port, struct username nick);
+	msg_storage msgs;
+
+	client(std::string server_ip, int server_port, struct username nick, std::string svpth);
+	~client() = default;
+
 	void send_message(message msg);
-	std::vector<message> messages_since (time_t timestamp, uint32_t ms);
+	void recv_messages(msg_id last);
 };
 
 #endif
