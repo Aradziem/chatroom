@@ -62,7 +62,7 @@ struct username un_from_str(std::string const sv)
 					(*iter >= 'A' && *iter <= 'Z') ||
 					(*iter >= 'a' && *iter <= 'z') ||
 					(*iter >= '0' && *iter <= '9') ||
-					*iter == '-' || *iter == '\n'); ++j, ++iter) {
+					*iter == '-' || *iter == '\0'); ++j, ++iter) {
 			raw[j] = *iter;
 		}
 

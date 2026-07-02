@@ -123,7 +123,7 @@ std::map<std::string, std::string> config()
 int main(int argc, char **argv) {
 	std::ios::sync_with_stdio(true);
 
-	char const *ip = "127.0.0.1";
+	auto conf = config();
 	for(int i = 1; i < argc; ++i) {
 		if(argv[i][0] == '-') {
 			for(int j = 1; argv[i][j]; ++j) {
@@ -133,7 +133,7 @@ int main(int argc, char **argv) {
 							cerr << "expected -i <ip>\n";
 							exit(1);
 						}
-						ip = argv[i+1];
+						conf["ip"] = argv[i+1];
 						goto argument_end;
 					default:
 						cerr << "unknown -" << argv[i][j] << '\n';
@@ -143,13 +143,11 @@ int main(int argc, char **argv) {
 		}
 argument_end:
 	}
+	if(!conf.contains("nick")) conf["nick"] = "Anonymous";
+	if(!conf.contains("ip")) conf["ip"] = "127.0.0.1";
 
-	std::string raw_nick = "Anonymous";
-	auto conf = config();
-	if(conf.contains("nick")) raw_nick = conf["nick"];
-	nick = un_from_str(raw_nick);
-
-	client c(ip, 6666, nick);
+	nick = un_from_str(conf["nick"]);
+	client c(conf["ip"], 6666, nick);
 	pid_t pid = fork();
 	if(pid < 0) {
 		cerr << "fork error\n";
