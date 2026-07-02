@@ -3,7 +3,7 @@
 #include "client.h"
 #include "client/client-connection.h"
 
-client::client(std::string server_ip, int server_port, struct username nick)
+client::client(std::string server_ip, int server_port, struct username nick, std::string svpth) : msgs(svpth)
 {
 	un = nick;
 	ip = server_ip;
@@ -18,25 +18,26 @@ void client::send_message(message msg)
 
 	conn.write(1,&message_type);
 	conn.write(sizeof(msg),&msg);
+
+	conn.read(sizeof(msg_id), &msg.id);
+	msgs.register_msg(msg);
 }
 
-std::vector<message> client::messages_since (time_t timestamp, uint32_t ms)
+void client::recv_messages (msg_id last)
 {
 	client_connection conn(ip,port);
 	char message_type = 'r';
 
 	conn.write(1,&message_type);
-	conn.write(sizeof(timestamp),&timestamp);
-	conn.write(4,&ms);
+	conn.write(sizeof(msg_id),&last);
 
-	int message_number;
-	conn.read(sizeof(message_number),&message_number);
-	std::vector<message> messages;
-	messages.resize(message_number);
-	for(int i=0;i<message_number;i++)
+	unsigned int message_number;
+	conn.read(sizeof(unsigned int),&message_number);
+	for(unsigned int i=0;i<message_number;i++)
 	{
-		conn.read(sizeof(message),&messages[i]);
+		struct message m;
+		conn.read(sizeof(struct message),&m);
+		msgs.register_msg(m);
 	}
-	return messages;
 }
 

@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <map>
 #include <fstream>
+#include <sys/stat.h>
 
 #include "client/client.h"
 #include "common/username.h"
@@ -13,12 +14,18 @@
 using namespace std;
 
 #define CONFIG_FILE "/.chatroomrc"
+#define STATE_DIR "/.local/share"
+#define SAVE_DIR "/chatroom-client"
+#define SAVE_FILE "/msgs"
 
 struct termios term, orig_term;
 struct username nick;
 
+client *pc;
+
 void cleanup(void) {
 	tcsetattr(STDIN_FILENO, 0, &orig_term);
+	pc->~client();
 }
 
 uint32_t get_ms() {
@@ -29,18 +36,16 @@ uint32_t get_ms() {
 
 void display(client* c)
 {
-	static time_t timestamp =0;
-	static uint32_t ms = 0;
+	static msg_id last_msg = 0;
 
 	while(1)
 	{
-		vector<message> messages = c->messages_since(timestamp, ms);
-		timestamp = time(0);
-		ms = get_ms();
-		for(long unsigned int i = 0; i< messages.size();i++)
+		c->recv_messages(last_msg);
+		for(auto m = c->msgs.msgs.upper_bound(last_msg); m != c->msgs.msgs.end(); ++m)
 		{
 			printf("\r");
-			cout<< username_pretty(messages[i].un) << ": " << messages[i].str<<'\n'; 
+			std::cout << username_pretty(m->second.un) << ": " << m->second.str << '\n'; 
+			if(m->second.id > last_msg) last_msg = m->second.id;
 		}
 		usleep(100000);
 	}
@@ -149,8 +154,26 @@ argument_end:
 	if(!conf.contains("nick")) conf["nick"] = "Anonymous";
 	if(!conf.contains("ip")) conf["ip"] = "127.0.0.1";
 
-	nick = un_from_str(conf["nick"]);
-	client c(conf["ip"], 6666, nick);
+	std::string raw_nick = "Anonymous";
+	auto conf = config();
+	if(conf.contains("nick")) raw_nick = conf["nick"];
+	nick = un_from_str(raw_nick);
+
+	char *home = getenv("HOME");
+	std::string save_path;
+	if(home) {
+		save_path = home;
+		save_path += STATE_DIR;
+		mkdir(save_path.c_str(), 0775);
+		save_path += SAVE_DIR;
+		mkdir(save_path.c_str(), 0775);
+		save_path += SAVE_FILE;
+	} else {
+		save_path = "/tmp/chatroom-msgs-client";
+	}
+
+	client c(ip, 6666, nick, save_path);
+	pc = &c;
 	pid_t pid = fork();
 	if(pid < 0) {
 		cerr << "fork error\n";
