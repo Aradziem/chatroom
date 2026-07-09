@@ -3,6 +3,7 @@
 #include <fstream>
 #include <iostream>
 #include <string.h>
+#include <signal.h>
 
 #define CONFIG_FILE "/.chatroomserverrc"
 #define STATE_DIR "/.local/share"
@@ -15,6 +16,11 @@ server *ps;
 
 void cleanup(void) {
 	ps->~server();
+}
+
+void sigint_handler(int)
+{
+	exit(0);
 }
 
 std::map<std::string, std::string> config()
@@ -84,6 +90,7 @@ argument_end:
 
 	server s(atoi(conf["port"].c_str()), save_path);
 	ps = &s;
+	signal(SIGINT, sigint_handler);
 	atexit(cleanup);
 	while(true)
 	{
