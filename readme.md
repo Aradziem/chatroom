@@ -1,7 +1,7 @@
-This is a simple chatroom.
-You can build it using make.
-It reads username from configuration file .chatroomrc in your home. You have to write nick:[your nick] to set it.
+This is a simple chatroom.  
+You can build it using `make`.  
+It reads the configuration file `$HOME/.chatroomrc` in the format `name=value`. If the first character of a line is a `'#'`, that line is a comment. Currently it only supports setting the nick via `nick=`.
 
-AUTHORS
-HHsNel
-Aradziem - supposed to be main author but is actually PR merger.
+# AUTHORS
+- hhsNel
+- Aradziem - supposed to be main author but is actually PR merger.
