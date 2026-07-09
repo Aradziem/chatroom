@@ -82,9 +82,10 @@ void display_command(char *cmd, unsigned int len, unsigned int win_h, char prece
 			if(c == 'R') break;
 		}
 	}
+	resp_buf[resp_len] = 0;
 	sscanf(resp_buf, "\033[%d;%dR", &cursor_y, &cursor_x);
 
-	if(cursor_y == win_h - 1) {
+	if(cursor_y == win_h) {
 		printf("\n");
 		--cursor_y;
 	}
@@ -99,45 +100,34 @@ int exec_command(char *cmd, char *failure_reason, unsigned int failure_len)
 {
 	char *token;
 	char *arg0, *arg1;
+#define FAIL(MSG) \
+	do { \
+		strncpy(failure_reason, MSG, failure_len-1); \
+		failure_reason[failure_len - 1] = 0; \
+		return 1; \
+	} while(0);
+
 
 	token = strtok(cmd, " \t");
-	if(! token) {
-		strncpy(failure_reason, "command empty", failure_len-1);
-		failure_reason[failure_len - 1] = 0;
-		return 1;
-	}
+	if(! token) FAIL("command empty");
 
 	if(strcmp(token, "set") == 0 || strcmp(token, "se") == 0) {
 		token = strtok(NULL, " \t");
-		if(! token) {
-			strncpy(failure_reason, "expected option name after set", failure_len-1);
-			failure_reason[failure_len - 1] = 0;
-			return 1;
-		}
+		if(! token) FAIL("expected option name after set");
 		arg0 = token;
+
 		token = strtok(NULL, " \t");
-		if(! token) {
-			strncpy(failure_reason, "expected option value after name", failure_len-1);
-			failure_reason[failure_len - 1] = 0;
-			return 1;
-		}
+		if(! token) FAIL("expected option value after name");
 		arg1 = token;
 
 		if(strcmp(arg0, "nick") == 0) {
 			nick = un_from_str(arg1);
 			pc->un = nick;
-		} else {
-			strncpy(failure_reason, "unknown set option", failure_len-1);
-			failure_reason[failure_len - 1] = 0;
-			return 1;
-		}
-	} else {
-		strncpy(failure_reason, "unknown command", failure_len-1);
-		failure_reason[failure_len - 1] = 0;
-		return 1;
-	}
+		} else FAIL("unknown set option");
+	} else FAIL("unknown command");
 
 	return 0;
+#undef FAIL
 }
 
 void command_mode()
