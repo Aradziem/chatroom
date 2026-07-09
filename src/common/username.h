@@ -10,7 +10,7 @@ struct username /* is sent over the network, so it can't be a class */
 	/* maybe pronouns? idk */
 };
 
-struct username un_from_str(std::string const sv);
+struct username un_from_str(std::string const str);
 std::string username_pretty(struct username const un);
 
 #endif
