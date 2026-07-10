@@ -5,7 +5,7 @@
 
 #include "common/connection.h"
 
-class server_connection : public connection
+class server_connection : public network_data::connection
 {
 	int fd;
 	int client_fd;

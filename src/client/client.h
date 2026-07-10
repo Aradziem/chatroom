@@ -15,10 +15,9 @@ class client
 	std::string ip;
 	int port;
 public:
-	struct username un;
 	msg_storage msgs;
 
-	client(std::string server_ip, int server_port, struct username nick, std::string svpth);
+	client(std::string server_ip, int server_port, std::string svpth);
 	~client() = default;
 
 	void send_message(message msg);

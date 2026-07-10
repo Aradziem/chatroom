@@ -13,6 +13,7 @@
 
 #include "client/client.h"
 #include "common/username.h"
+#include "client/cmds.h"
 
 using namespace std;
 
@@ -24,9 +25,6 @@ using namespace std;
 #define CURSOR "\033[7m \033[27m"
 
 struct termios term, orig_term;
-struct username nick;
-
-client *pc;
 
 void cleanup(void) {
 	tcsetattr(STDIN_FILENO, 0, &orig_term);
@@ -94,40 +92,6 @@ void display_command(char *cmd, unsigned int len, unsigned int win_h, char prece
 	if(display_cursor) printf(CURSOR);
 	printf("\033[0K\033[%d;%dH", cursor_y, cursor_x);
 	fflush(stdout);
-}
-
-int exec_command(char *cmd, char *failure_reason, unsigned int failure_len)
-{
-	char *token;
-	char *arg0, *arg1;
-#define FAIL(MSG) \
-	do { \
-		strncpy(failure_reason, MSG, failure_len-1); \
-		failure_reason[failure_len - 1] = 0; \
-		return 1; \
-	} while(0);
-
-
-	token = strtok(cmd, " \t");
-	if(! token) FAIL("command empty");
-
-	if(strcmp(token, "set") == 0 || strcmp(token, "se") == 0) {
-		token = strtok(NULL, " \t");
-		if(! token) FAIL("expected option name after set");
-		arg0 = token;
-
-		token = strtok(NULL, " \t");
-		if(! token) FAIL("expected option value after name");
-		arg1 = token;
-
-		if(strcmp(arg0, "nick") == 0) {
-			nick = un_from_str(arg1);
-			pc->un = nick;
-		} else FAIL("unknown set option");
-	} else FAIL("unknown command");
-
-	return 0;
-#undef FAIL
 }
 
 void command_mode()
@@ -244,6 +208,7 @@ void read_message(client *clnt)
 		msg.str[idx] = 0;
 		msg.send_time = time(0);
 		msg.ms = get_ms();
+		msg.un = nick;
 		clnt->send_message(msg);
 	}
 }
@@ -321,8 +286,7 @@ argument_end:
 		save_path = "/tmp/chatroom-msgs-client";
 	}
 
-	client c(conf["ip"], 6666, nick, save_path);
-	pc = &c;
+	client c(conf["ip"], 6666, save_path);
 	pid_t pid = fork();
 	if(pid < 0) {
 		cerr << "fork error\n";

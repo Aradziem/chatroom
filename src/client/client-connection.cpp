@@ -43,3 +43,9 @@ void client_connection::write(int bytes, void* buffer)
 	::write(fd, buffer, bytes);
 }
 
+void client_connection::drop()
+{
+	close(fd);
+	fd = -1;
+}
+

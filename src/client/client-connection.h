@@ -6,7 +6,7 @@
 
 #include "common/connection.h"
 
-class client_connection : public connection
+class client_connection : public network_data::connection
 {
 	int fd;
 	struct sockaddr_in address;
@@ -16,6 +16,7 @@ public:
 	~client_connection();
 	void read(int bytes, void* buffer);
 	void write(int bytes, void* buffer);
+	void drop();
 };
 
 #endif

@@ -12,8 +12,8 @@ class server
 	server_connection conn;
 	msg_storage msgs;
 
-	void handle_s ();
-	void handle_r();
+	void handle_write_message();
+	void handle_query_messages();
 public:
 
 	server(int port, std::string svpth) : conn(port), msgs(svpth) { };
