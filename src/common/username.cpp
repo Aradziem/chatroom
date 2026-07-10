@@ -49,20 +49,20 @@ static void unpack(char s[4], uint8_t const p[3])
 	s[3] = from_id( p[2] >> 2);
 }
 
-struct username un_from_str(std::string const sv)
+struct username un_from_str(std::string const str)
 {
 	struct username un;
 	unsigned int i, j;
 	char const *iter;
 	char raw[8];
 
-	iter = sv.data();
+	iter = str.c_str();
 	for(i = 0; i < 8; ++i) {
 		for(j = 0; j < 8 && (
 					(*iter >= 'A' && *iter <= 'Z') ||
 					(*iter >= 'a' && *iter <= 'z') ||
 					(*iter >= '0' && *iter <= '9') ||
-					*iter == '-' || *iter == '\0'); ++j, ++iter) {
+					*iter == '-'); ++j, ++iter) {
 			raw[j] = *iter;
 		}
 

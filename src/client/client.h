@@ -12,10 +12,10 @@
 
 class client
 {
-	struct username un;
 	std::string ip;
 	int port;
 public:
+	struct username un;
 	msg_storage msgs;
 
 	client(std::string server_ip, int server_port, struct username nick, std::string svpth);

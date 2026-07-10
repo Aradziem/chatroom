@@ -7,6 +7,9 @@
 #include <map>
 #include <fstream>
 #include <sys/stat.h>
+#include <sys/ioctl.h>
+#include <signal.h>
+#include <sys/wait.h>
 
 #include "client/client.h"
 #include "common/username.h"
@@ -18,6 +21,8 @@ using namespace std;
 #define SAVE_DIR "/chatroom-client"
 #define SAVE_FILE "/msgs"
 
+#define CURSOR "\033[7m \033[27m"
+
 struct termios term, orig_term;
 struct username nick;
 
@@ -25,7 +30,7 @@ client *pc;
 
 void cleanup(void) {
 	tcsetattr(STDIN_FILENO, 0, &orig_term);
-	pc->~client();
+	printf("\033[?25h\n");
 }
 
 uint32_t get_ms() {
@@ -44,14 +49,142 @@ void display(client* c)
 		for(auto m = c->msgs.msgs.upper_bound(last_msg); m != c->msgs.msgs.end(); ++m)
 		{
 			printf("\r");
-			std::cout << username_pretty(m->second.un) << ": " << m->second.str << '\n'; 
+			std::cout << username_pretty(m->second.un) << ": " << m->second.str;
+			printf("\033[0K\n");
+			fflush(stdout);
 			if(m->second.id > last_msg) last_msg = m->second.id;
 		}
 		usleep(100000);
 	}
 }
 
-message read_message()
+void display_command(char *cmd, unsigned int len, unsigned int win_h, char preceding_char, int display_cursor)
+{
+	unsigned int cursor_x, cursor_y;
+	char resp_buf[64];
+	unsigned int resp_len;
+	int ret;
+	char c;
+	struct pollfd pfd;
+
+	pfd.fd = STDIN_FILENO;
+	pfd.events = POLLIN;
+
+	printf("\033[6n");
+	fflush(stdout);
+	cursor_x = cursor_y = 0; /* fallback cur pos */
+	resp_len = 0;
+	for(resp_len = 0; resp_len < sizeof(resp_buf)-1;) {
+		ret = poll(&pfd, 1, 10);
+		if(ret > 0 && pfd.revents & POLLIN) {
+			read(STDIN_FILENO, &c, 1);
+			resp_buf[resp_len++] = c;
+			if(c == 'R') break;
+		}
+	}
+	resp_buf[resp_len] = 0;
+	sscanf(resp_buf, "\033[%d;%dR", &cursor_y, &cursor_x);
+
+	if(cursor_y == win_h) {
+		printf("\n");
+		--cursor_y;
+	}
+	
+	printf("\033[%d;0H%c%.*s", win_h, preceding_char, len, cmd);
+	if(display_cursor) printf(CURSOR);
+	printf("\033[0K\033[%d;%dH", cursor_y, cursor_x);
+	fflush(stdout);
+}
+
+int exec_command(char *cmd, char *failure_reason, unsigned int failure_len)
+{
+	char *token;
+	char *arg0, *arg1;
+#define FAIL(MSG) \
+	do { \
+		strncpy(failure_reason, MSG, failure_len-1); \
+		failure_reason[failure_len - 1] = 0; \
+		return 1; \
+	} while(0);
+
+
+	token = strtok(cmd, " \t");
+	if(! token) FAIL("command empty");
+
+	if(strcmp(token, "set") == 0 || strcmp(token, "se") == 0) {
+		token = strtok(NULL, " \t");
+		if(! token) FAIL("expected option name after set");
+		arg0 = token;
+
+		token = strtok(NULL, " \t");
+		if(! token) FAIL("expected option value after name");
+		arg1 = token;
+
+		if(strcmp(arg0, "nick") == 0) {
+			nick = un_from_str(arg1);
+			pc->un = nick;
+		} else FAIL("unknown set option");
+	} else FAIL("unknown command");
+
+	return 0;
+#undef FAIL
+}
+
+void command_mode()
+{
+	struct winsize ws;
+	char cmd_buf[2048];
+	struct pollfd pfd;
+	int ret;
+	unsigned int cmd_len;
+	char c;
+	char failure_reason[64];
+
+	ws.ws_row = 24; /* fallback term height */
+	ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws);
+
+	pfd.fd = STDIN_FILENO;
+	pfd.events = POLLIN;
+
+	display_command(cmd_buf, 0, ws.ws_row, ':', 1);
+	for(cmd_len = 0; cmd_len < sizeof(cmd_buf)-1;) {
+		ret = poll(&pfd, 1, 10);
+		if(ret > 0 && pfd.revents & POLLIN) {
+			read(STDIN_FILENO, &c, 1);
+
+			switch(c) {
+			case '\n':
+			case '\r':
+			case 4:
+				goto exec;
+			case 127:
+				if(cmd_len) --cmd_len;
+				break;
+			case 21:
+				cmd_len = 0;
+				break;
+			case 3:
+			case 27:
+				display_command(cmd_buf, 0, ws.ws_row, ' ', 0);
+				return;
+			default:
+				cmd_buf[cmd_len++] = c;
+				break;
+			}
+			display_command(cmd_buf, cmd_len, ws.ws_row, ':', 1);
+		}
+	}
+
+exec:
+	cmd_buf[cmd_len] = 0;
+	if(exec_command(cmd_buf, failure_reason, sizeof(failure_reason))) {
+		display_command(failure_reason, strlen(failure_reason), ws.ws_row, '!', 0);
+	} else {
+		display_command(cmd_buf, 0, ws.ws_row, ' ', 0);
+	}
+}
+
+void read_message(client *clnt)
 {
 	message msg;
 	int idx = 0;
@@ -59,43 +192,60 @@ message read_message()
 	char c;
 	struct pollfd pfd;
 
-	printf("\r");
-	cout << username_pretty(nick) << ": ";
-
 	pfd.fd = STDIN_FILENO;
 	pfd.events = POLLIN;
-	
-	for(idx = 0; idx < 63;) {
-		ret = poll(&pfd, 1, 10);
-		if(ret > 0 && pfd.revents & POLLIN) {
-			ignore = read(STDIN_FILENO, &c, 1);
 
-			switch(c) {
-			case '\n':
-			case '\r':
-				goto send;
-			case 127:
-				--idx;
-				break;
-			case 21:
-				idx = 0;
-				break;
-			default:
-				msg.str[idx++] = c;
-				break;
-			}
-		}
+	while(1) {
 		printf("\r");
 		cout << username_pretty(nick) << ": ";
-		printf("%.*s\033[0K", idx, msg.str);
-		fflush(stdout);
-	}
+		printf(CURSOR);
+		
+		for(idx = 0; idx < 63;) {
+			ret = poll(&pfd, 1, 10);
+			if(ret > 0 && pfd.revents & POLLIN) {
+				read(STDIN_FILENO, &c, 1);
 
-send:
-	msg.str[idx] = 0;
-	msg.send_time = time(0);
-	msg.ms = get_ms();
-	return msg;
+				switch(c) {
+				case '\n':
+				case '\r':
+					goto send;
+				case 127:
+					if(idx) --idx;
+					break;
+				case 21:
+					idx = 0;
+					break;
+				case 3:
+				case 4:
+				case 27:
+					return;
+				case ':':
+					if(idx == 0) {
+						printf("\r");
+						cout << username_pretty(nick) << ": ";
+						printf("%.*s\033[0K", idx, msg.str);
+						fflush(stdout);
+						command_mode();
+						break;
+					}
+					/* FALLTHROUGH */
+				default:
+					msg.str[idx++] = c;
+					break;
+				}
+			}
+			printf("\r");
+			cout << username_pretty(nick) << ": ";
+			printf("%.*s\033[0K" CURSOR, idx, msg.str);
+			fflush(stdout);
+		}
+
+	send:
+		msg.str[idx] = 0;
+		msg.send_time = time(0);
+		msg.ms = get_ms();
+		clnt->send_message(msg);
+	}
 }
 
 std::map<std::string, std::string> config()
@@ -182,14 +332,18 @@ argument_end:
 		return 0;
 	}
 
+	setbuf(stdin, NULL);
 	tcgetattr(STDIN_FILENO, &term);
 	orig_term = term;
-	term.c_lflag &= ~ECHO & ~ICANON & ~IEXTEN & ~ICRNL;
+	term.c_lflag &= ~ECHO & ~ICANON & ~ISIG & ~IEXTEN & ~ICRNL;
+	term.c_cc[VMIN] = 1;
+	term.c_cc[VTIME] = 0;
 	atexit(cleanup);
 	tcsetattr(STDIN_FILENO, 0, &term);
+	printf("\033[?25l");
 
-	while(1) {
-		c.send_message(read_message());
-	}
+	read_message(&c);
+	kill(pid, SIGTERM);
+	waitpid(pid, NULL, 0);
 }
 
