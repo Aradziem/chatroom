@@ -1,28 +1,31 @@
 #include "server.h"
 
-void server::handle_s ()
+void server::handle_write_message()
 {
-	message msg;
+	network_data::write_message in;
+	network_data::message_recvd out;
 
-	conn.read(sizeof(msg),&msg);
-	msg.id = msgs.msgs.size() + 1;
-	msgs.register_msg(msg);
-	conn.write(sizeof(msg_id), &msg.id);
+	conn.read(sizeof(network_data::write_message), &in);
+	in.msg.id = msgs.msgs.size() + 1;
+	msgs.register_msg(in.msg);
+	out.id = in.msg.id;
+	conn.write(sizeof(network_data::message_recvd), &out);
 }
 
-void server::handle_r()
+void server::handle_query_messages()
 {
-	msg_id first_id;
+	network_data::query_messages in;
+	network_data::messages_diff out;
 	std::map<msg_id, struct message>::iterator it;
-	unsigned int i, num;
+	unsigned int i;
 
-	conn.read(sizeof(msg_id), &first_id);
+	conn.read(sizeof(network_data::query_messages), &in);
 
-	it = msgs.msgs.upper_bound(first_id);
-	num = std::distance(it, msgs.msgs.end());
-	conn.write(sizeof(unsigned int), &num);
+	it = msgs.msgs.upper_bound(in.first_id);
+	out.num = std::distance(it, msgs.msgs.end());
+	conn.write(sizeof(network_data::messages_diff), &out);
 
-	for(i = 0; i< num; ++i, ++it)
+	for(i = 0; i< out.num; ++i, ++it)
 	{
 		conn.write(sizeof(struct message), &it->second);
 	}
@@ -30,15 +33,17 @@ void server::handle_r()
 
 void server::handle()
 {
-	char message_type;
-	conn.read(1,&message_type);
-	switch (message_type)
+	network_data::type t;
+
+	conn.read(sizeof(network_data::type), &t);
+
+	switch (t)
 	{
-		case 's':
-			handle_s();
+		case NETWORK_DATA_WRITE_MESSAGE:
+			handle_write_message();
 			break;
-		case 'r':
-			handle_r();
+		case NETWORK_DATA_QUERY_MESSAGES:
+			handle_query_messages();
 			break;
 	}
 	conn.drop();
