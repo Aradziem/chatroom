@@ -16,8 +16,7 @@ struct style highlight_msg_author = {.type=COLOR_DEFAULT,.styles=0};
 struct style highlight_msg_text = {.type=COLOR_DEFAULT,.styles=0};
 struct style highlight_command = {.type=COLOR_DEFAULT,.styles=0};
 struct style highlight_command_failure = {.type=COLOR_RGB,.rgb={255,0,0},.styles=0};
-void print_style(struct style c);
-void reset_styles();
+long int fetch_timeout_ms = 100;
 
 #define FAIL(MSG) \
 	do { \
@@ -29,6 +28,9 @@ void reset_styles();
 struct command_result set(std::vector<char *> argv, char *failure_reason, unsigned int failure_len);
 struct command_result highlight(std::vector<char *> argv, char *failure_reason, unsigned int failure_len);
 struct command_result source(std::vector<char *> argv, char *failure_reason, unsigned int failure_len);
+
+void print_style(struct style c);
+void reset_styles();
 
 struct command {
 	char const *name;
@@ -149,6 +151,10 @@ struct command_result set(std::vector<char *> argv, char *failure_reason, unsign
 		return res;
 	} else if(strcmp(argv[0], "port") == 0) {
 		port = atoi(argv[1]);
+		res.config.resize(0);
+		return res;
+	} else if(strcmp(argv[0], "fetch_timeout") == 0) {
+		fetch_timeout_ms = atoll(argv[1]);
 		res.config.resize(0);
 		return res;
 	} else FAIL("unknown set option");
