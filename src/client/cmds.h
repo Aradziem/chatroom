@@ -31,6 +31,7 @@ extern struct style highlight_msg_author;
 extern struct style highlight_msg_text;
 extern struct style highlight_command;
 extern struct style highlight_command_failure;
+extern long int fetch_timeout_ms;
 
 enum config_type { CONFIG_SET, CONFIG_HIGHLIGHT };
 enum config_set_name { CONFIG_SET_NICK };

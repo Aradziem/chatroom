@@ -275,7 +275,7 @@ void logic_proc(client c, int fd_in, int fd_out)
 	poll_fds[0].events = POLLIN;
 
 	poll_fds[1].fd = timerfd_create(CLOCK_MONOTONIC, 0);
-	its = {.it_interval = {.tv_sec = 0, .tv_nsec = 100 * 1000000}, .it_value = {.tv_sec = 0, .tv_nsec = 100 * 1000000}};
+	its = {.it_interval = {.tv_sec = fetch_timeout_ms/1000, .tv_nsec = (fetch_timeout_ms%1000) * 1000000}, .it_value = {.tv_sec = fetch_timeout_ms/1000, .tv_nsec = (fetch_timeout_ms%1000) * 1000000}};
 	timerfd_settime(poll_fds[1].fd, 0, &its, NULL);
 	poll_fds[1].events = POLLIN;
 
