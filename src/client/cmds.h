@@ -2,6 +2,7 @@
 #define CMDS_H
 
 #include <stdint.h>
+#include <vector>
 
 #include "common/username.h"
 
@@ -41,10 +42,10 @@ struct update_config {
 		} hi;
 	};
 };
-enum command_res_type { COMMAND_OK, COMMAND_FAILED, COMMAND_UPDATE_CONFIG };
+enum command_res_type { COMMAND_OK, COMMAND_FAILED };
 struct command_result {
 	enum command_res_type type;
-	struct update_config config;
+	std::vector<struct update_config> config;
 };
 
 struct command_result exec_command(char *cmd, char *failure_reason, unsigned int failure_len);

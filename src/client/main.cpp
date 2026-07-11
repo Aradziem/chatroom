@@ -260,6 +260,7 @@ void logic_proc(client c, int fd_in, int fd_out)
 	struct logic_comm incoming;
 	struct io_comm outgoing;
 	struct command_result cmd_res;
+	unsigned int i;
 
 	poll_fds[0].fd = fd_in;
 	poll_fds[0].events = POLLIN;
@@ -285,9 +286,9 @@ void logic_proc(client c, int fd_in, int fd_out)
 				outgoing.disp_status.failure = cmd_res.type == COMMAND_FAILED;
 				if(! outgoing.disp_status.failure) strncpy(outgoing.disp_status.status, "ok", sizeof(outgoing.disp_status.status));
 				write(fd_out, &outgoing, sizeof(struct io_comm));
-				if(cmd_res.type == COMMAND_UPDATE_CONFIG) {
+				for(i = 0; i < cmd_res.config.size(); ++i ) {
 					outgoing.type = IO_COMM_CONFIG;
-					outgoing.config.new_conf = cmd_res.config;
+					outgoing.config.new_conf = cmd_res.config[i];
 					write(fd_out, &outgoing, sizeof(struct io_comm));
 				}
 				break;
@@ -317,40 +318,12 @@ void logic_proc(client c, int fd_in, int fd_out)
 	}
 }
 
-std::map<std::string, std::string> config()
-{
-	std::map<std::string, std::string> m;
-	char *home = getenv("HOME");
-	if(home) {
-		char *config_path = new char[strlen(home) + sizeof(CONFIG_FILE)];
-		if(config_path) {
-			strcpy(config_path, home);
-			strcat(config_path, CONFIG_FILE);
-			std::ifstream config(config_path);
-			if(config.is_open()) {
-				std::string ln;
-				while(std::getline(config, ln)) {
-					if(ln[0] == '#') continue;
-					auto d = ln.find('=');
-					if(d != std::string::npos) {
-						m[ln.substr(0, d)] = ln.substr(d+1);
-					}
-				}
-			}
-		}
-		delete[] config_path;
-	}
-
-	return m;
-}
-
 int main(int argc, char **argv) {
 	std::ios::sync_with_stdio(true);
 
 	signal(SIGINT, signal_handler);
 	signal(SIGPIPE, signal_handler);
 
-	auto conf = config();
 	for(int i = 1; i < argc; ++i) {
 		if(argv[i][0] == '-') {
 			for(int j = 1; argv[i][j]; ++j) {
@@ -363,22 +336,13 @@ int main(int argc, char **argv) {
 						} \
 						conf[STR] = argv[i+1]; \
 						goto argument_end;
-					ARG_OPT('i', "ip");
-					ARG_OPT('u', "nick");
 					default:
 						cerr << "unknown -" << argv[i][j] << '\n';
 						exit(1);
 				}
 			}
 		}
-argument_end:
 	}
-	if(!conf.contains("nick")) conf["nick"] = "Anonymous";
-	if(!conf.contains("ip")) conf["ip"] = "127.0.0.1";
-
-	std::string raw_nick = "Anonymous";
-	if(conf.contains("nick")) raw_nick = conf["nick"];
-	nick = un_from_str(raw_nick);
 
 	char *home = getenv("HOME");
 	std::string save_path;
@@ -412,7 +376,29 @@ argument_end:
 		close(io_pipe[0]);
 		close(logic_pipe[1]);
 
-		client c(conf["ip"], 6666, save_path);
+		client c("127.0.0.1", 6666, save_path);
+
+		if(home) {
+			char *config_cmd = new char[strlen("source ") + strlen(home) + sizeof(CONFIG_FILE)];
+			if(config_cmd) {
+				strcpy(config_cmd, "source ");
+				strcat(config_cmd, home);
+				strcat(config_cmd, CONFIG_FILE);
+				char failure[2048];
+				auto res = exec_command(config_cmd, failure, sizeof(failure));
+				if(res.type == COMMAND_FAILED) {
+					/* TODO: move this to the IO proc */
+					printf("\n\n\n%s\n\n\n", failure);
+				}
+				for(auto uc : res.config) {
+					struct io_comm c;
+					c.type = IO_COMM_CONFIG;
+					c.config.new_conf = uc;
+					write(io_pipe[1], &c, sizeof(struct io_comm));
+				}
+				delete[] config_cmd;
+			}
+		}
 
 		logic_proc(c, logic_pipe[0], io_pipe[1]);
 		return 0;
