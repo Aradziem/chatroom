@@ -11,6 +11,7 @@
 #include <signal.h>
 #include <sys/wait.h>
 #include <sys/timerfd.h>
+#include <inttypes.h>
 
 #include "client/client.h"
 #include "common/username.h"
@@ -84,12 +85,36 @@ uint32_t get_ms() {
 
 void display_command(char *cmd, unsigned int len, unsigned int win_h, char preceding_char, int display_cursor, struct style s)
 {
-	print_style(s);
-	printf("\0337\033[%d;0H%c%.*s", win_h, preceding_char, len, cmd);
+	printf_styled(s, "\0337\033[%d;0H%c%.*s", win_h, preceding_char, len, cmd);
 	if(display_cursor) printf(CURSOR);
 	printf("\033[0K\0338");
-	reset_styles();
 	fflush(stdout);
+}
+
+void display_msg(char const *prefix, msg_id mid, time_t send_time, uint32_t ms, struct username un, char *msg, unsigned int len, int cursor)
+{
+	std::string pretty_un;
+	char time_buf[128];
+
+	printf("\r");
+	if(prefix) printf("%s", prefix);
+
+	printf_styled(highlight_msg_id, "[%" PRIu64 "] ", (uint64_t)mid);
+
+	pretty_un = username_pretty(un);
+	printf_styled(highlight_msg_author, "%s", pretty_un.c_str());
+
+	strftime(time_buf, sizeof(time_buf), "%a %b %d %Y %H:%M:%S", gmtime(&send_time));
+	printf_styled(highlight_msg_time, " @ %s", time_buf);
+
+	printf_styled(highlight_msg_time_ms, ":%" PRIu32 " ", ms);
+
+	printf(": ");
+
+	printf_styled(highlight_msg_text, "%.*s", len, msg);
+
+	if(cursor) printf(CURSOR);
+	printf("\033[0K");
 }
 
 void io_proc(int fd_in, int fd_out)
@@ -115,11 +140,7 @@ void io_proc(int fd_in, int fd_out)
 
 	state = IO_WRITING_MSG;
 	read_length = 0;
-	printf("\r(writing) ");
-	print_style(highlight_msg_author);
-	std::cout << username_pretty(nick);
-	reset_styles();
-	printf(": " CURSOR "\033[0K");
+	display_msg("(writing) ", 0, time(0), get_ms(), nick, read_buffer, read_length, 1);
 	fflush(stdout);
 	while(1) {
 		ret = poll(poll_fds, sizeof(poll_fds)/sizeof(*poll_fds), -1);
@@ -128,15 +149,15 @@ void io_proc(int fd_in, int fd_out)
 			read(fd_in, &incoming, sizeof(struct io_comm));
 			switch(incoming.type) {
 			case IO_COMM_DISP_MSG:
-				printf("\r");
-				print_style(highlight_msg_author);
-				std::cout << username_pretty(incoming.disp_msg.inc_msg.un);
-				reset_styles();
-				printf(": ");
-				print_style(highlight_msg_text);
-				printf("%s", incoming.disp_msg.inc_msg.str);
-				reset_styles();
-				printf("\033[0K");
+				display_msg(
+					NULL,
+					incoming.disp_msg.inc_msg.id,
+					incoming.disp_msg.inc_msg.send_time,
+					incoming.disp_msg.inc_msg.ms,
+					incoming.disp_msg.inc_msg.un,
+					incoming.disp_msg.inc_msg.str,
+					sizeof(incoming.disp_msg.inc_msg.str), 0);
+				printf("\n");
 				fflush(stdout);
 				break;
 			case IO_COMM_DISP_STATUS:
@@ -183,11 +204,7 @@ void io_proc(int fd_in, int fd_out)
 				break;
 			case ':':
 				if(state == IO_WRITING_MSG && read_length == 0) {
-					printf("\r(writing) ");
-					print_style(highlight_msg_author);
-					std::cout << username_pretty(nick);
-					reset_styles();
-					printf(": \033[0K");
+					printf("\r\033[0K");
 					fflush(stdout);
 					state = IO_WRITING_COMMAND;
 					break;
@@ -225,15 +242,7 @@ void io_proc(int fd_in, int fd_out)
 
 		switch(state) {
 		case IO_WRITING_MSG:
-			printf("\r(writing) ");
-			print_style(highlight_msg_author);
-			std::cout << username_pretty(nick);
-			reset_styles();
-			printf(": ");
-			print_style(highlight_msg_text);
-			printf("%.*s", read_length, read_buffer);
-			reset_styles();
-			printf(CURSOR "\033[0K");
+			display_msg("(writing) ", 0, time(0), get_ms(), nick, read_buffer, read_length, 1);
 			fflush(stdout);
 			break;
 		case IO_WRITING_COMMAND:
