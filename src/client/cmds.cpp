@@ -1,9 +1,9 @@
 #include "cmds.h"
 
 #include <string.h>
-#include <vector>
 #include <inttypes.h>
 #include <stdio.h>
+#include <fstream>
 
 struct username nick = un_from_str("Anonymous");
 struct style highlight_msg_author = {.type=COLOR_DEFAULT,.styles=0};
@@ -20,6 +20,7 @@ struct style highlight_command_failure = {.type=COLOR_RGB,.rgb={255,0,0},.styles
 
 struct command_result set(std::vector<char *> argv, char *failure_reason, unsigned int failure_len);
 struct command_result highlight(std::vector<char *> argv, char *failure_reason, unsigned int failure_len);
+struct command_result source(std::vector<char *> argv, char *failure_reason, unsigned int failure_len);
 
 struct command {
 	char const *name;
@@ -32,6 +33,8 @@ struct command commands[] = {
 	{ "se",         2,   set },
 	{ "highlight",  -1,  highlight },
 	{ "hi",         -1,  highlight },
+	{ "source",     1,   source },
+	{ "so",         1,   source },
 };
 
 struct command_result exec_command(char *cmd, char *failure_reason, unsigned int failure_len)
@@ -125,16 +128,17 @@ struct command_result set(std::vector<char *> argv, char *failure_reason, unsign
 {
 	struct command_result res;
 
-	res.type = COMMAND_UPDATE_CONFIG;
-	res.config.type = CONFIG_SET;
+	res.type = COMMAND_OK;
+	res.config.resize(1);
+	res.config[0].type = CONFIG_SET;
 
 	if(strcmp(argv[0], "nick") == 0) {
 		nick = un_from_str(argv[1]);
-		res.config.set.name = CONFIG_SET_NICK;
+		res.config[0].set.name = CONFIG_SET_NICK;
 	} else FAIL("unknown set option");
 
-	strncpy(res.config.set.value, argv[1], sizeof(res.config.set.value)-1);
-	res.config.set.value[sizeof(res.config.set.value)] = 0;
+	strncpy(res.config[0].set.value, argv[1], sizeof(res.config[0].set.value)-1);
+	res.config[0].set.value[sizeof(res.config[0].set.value)-1] = 0;
 	return res;
 }
 
@@ -147,21 +151,22 @@ struct command_result highlight(std::vector<char *> argv, char *failure_reason, 
 
 	if(argv.size() < 1) FAIL("expected a highlight group");
 
-	res.type = COMMAND_UPDATE_CONFIG;
-	res.config.type = CONFIG_HIGHLIGHT;
+	res.type = COMMAND_OK;
+	res.config.resize(1);
+	res.config[0].type = CONFIG_HIGHLIGHT;
 
 	if(strcmp(argv[0], "msg_author") == 0) {
 		tgt_hi = &highlight_msg_author;
-		res.config.hi.name = CONFIG_HI_MSG_AUTHOR;
+		res.config[0].hi.name = CONFIG_HI_MSG_AUTHOR;
 	} else if(strcmp(argv[0], "msg_text") == 0) {
 		tgt_hi = &highlight_msg_text;
-		res.config.hi.name = CONFIG_HI_MSG_TEXT;
+		res.config[0].hi.name = CONFIG_HI_MSG_TEXT;
 	} else if(strcmp(argv[0], "command") == 0) {
 		tgt_hi = &highlight_command;
-		res.config.hi.name = CONFIG_HI_COMMAND;
+		res.config[0].hi.name = CONFIG_HI_COMMAND;
 	} else if(strcmp(argv[0], "command_failure") == 0) {
 		tgt_hi = &highlight_command_failure;
-		res.config.hi.name = CONFIG_HI_COMMAND_FAILURE;
+		res.config[0].hi.name = CONFIG_HI_COMMAND_FAILURE;
 	} else FAIL("unknown highlight group");
 
 	for(i = 1; i < argv.size(); ++i) {
@@ -190,7 +195,38 @@ struct command_result highlight(std::vector<char *> argv, char *failure_reason, 
 		}
 	}
 
-	res.config.hi.value = *tgt_hi;
+	res.config[0].hi.value = *tgt_hi;
 	return res;
+}
+
+struct command_result source(std::vector<char *> argv, char *failure_reason, unsigned int failure_len)
+{
+	std::string ln;
+	std::ifstream f;
+	struct command_result partial_res, full_res;
+
+	f.open(argv[0]);
+	if(! f.is_open()) FAIL("couldn't open file");
+
+	*failure_reason = 0;
+	full_res.type = COMMAND_OK;
+
+	while(std::getline(f, ln)) {
+		if(ln[0] != '#' && ln.size()) {
+			partial_res = exec_command(ln.data(), failure_reason, failure_len);
+			if(*failure_reason) {
+				failure_len -= strlen(failure_reason);
+				failure_reason += strlen(failure_reason);
+				if(failure_len > 1) {
+					--failure_len;
+					*(failure_reason++) = ',';
+				}
+			}
+			if(partial_res.type == COMMAND_FAILED) full_res.type = COMMAND_FAILED;
+			full_res.config.insert(full_res.config.end(), partial_res.config.begin(), partial_res.config.end());
+		}
+	}
+
+	return full_res;
 }
 
