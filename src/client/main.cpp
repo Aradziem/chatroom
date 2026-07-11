@@ -107,7 +107,7 @@ void display_msg(char const *prefix, msg_id mid, time_t send_time, uint32_t ms, 
 	strftime(time_buf, sizeof(time_buf), "%a %b %d %Y %H:%M:%S", gmtime(&send_time));
 	printf_styled(highlight_msg_time, " @ %s", time_buf);
 
-	printf_styled(highlight_msg_time_ms, ":%" PRIu32 " ", ms);
+	printf_styled(highlight_msg_time_ms, ":%03" PRIu32 " ", ms);
 
 	printf(": ");
 
