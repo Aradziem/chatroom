@@ -64,9 +64,11 @@ struct logic_comm {
 	};
 };
 
-void signal_handler(int)
+void signal_handler(int sig)
 {
 	signal_raised = 1;
+
+	signal(sig, signal_handler);
 }
 
 void cleanup(void) {
