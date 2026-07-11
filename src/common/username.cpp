@@ -80,11 +80,10 @@ struct username un_from_str(std::string const str)
 
 static std::string username_chunk(struct username const un, unsigned int const chunk)
 {
-	std::string str;
+	char str[8];
 
-	str.resize(8);
-	unpack(str.data() + 0, un.packed[chunk] + 0);
-	unpack(str.data() + 4, un.packed[chunk] + 3);
+	unpack(str + 0, un.packed[chunk] + 0);
+	unpack(str + 4, un.packed[chunk] + 3);
 
 	return str;
 }

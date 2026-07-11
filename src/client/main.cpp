@@ -27,7 +27,7 @@ using namespace std;
 
 struct termios term, orig_term;
 
-enum io_comm_type { IO_COMM_DISP_MSG, IO_COMM_DISP_STATUS, IO_COMM_QUIT };
+enum io_comm_type { IO_COMM_DISP_MSG, IO_COMM_DISP_STATUS, IO_COMM_CONFIG, IO_COMM_QUIT };
 struct io_comm {
 	enum io_comm_type type;
 	union {
@@ -38,6 +38,9 @@ struct io_comm {
 			int failure;
 			char status[256];
 		} disp_status;
+		struct {
+			struct update_config new_conf;
+		} config;
 		struct {
 			int ret_val;
 		} quit;
@@ -73,39 +76,9 @@ uint32_t get_ms() {
 
 void display_command(char *cmd, unsigned int len, unsigned int win_h, char preceding_char, int display_cursor)
 {
-	unsigned int cursor_x, cursor_y;
-	char resp_buf[64];
-	unsigned int resp_len;
-	int ret;
-	char c;
-	struct pollfd pfd;
-
-	pfd.fd = STDIN_FILENO;
-	pfd.events = POLLIN;
-
-	printf("\033[6n");
-	fflush(stdout);
-	cursor_x = cursor_y = 0; /* fallback cur pos */
-	resp_len = 0;
-	for(resp_len = 0; resp_len < sizeof(resp_buf)-1;) {
-		ret = poll(&pfd, 1, 10);
-		if(ret > 0 && pfd.revents & POLLIN) {
-			read(STDIN_FILENO, &c, 1);
-			resp_buf[resp_len++] = c;
-			if(c == 'R') break;
-		}
-	}
-	resp_buf[resp_len] = 0;
-	sscanf(resp_buf, "\033[%d;%dR", &cursor_y, &cursor_x);
-
-	if(cursor_y == win_h) {
-		printf("\n");
-		--cursor_y;
-	}
-	
-	printf("\033[%d;0H%c%.*s", win_h, preceding_char, len, cmd);
+	printf("\0337\033[%d;0H%c%.*s", win_h, preceding_char, len, cmd);
 	if(display_cursor) printf(CURSOR);
-	printf("\033[0K\033[%d;%dH", cursor_y, cursor_x);
+	printf("\033[0K\0338");
 	fflush(stdout);
 }
 
@@ -150,6 +123,9 @@ void io_proc(int fd_in, int fd_out)
 			case IO_COMM_DISP_STATUS:
 				display_command(incoming.disp_status.status, strlen(incoming.disp_status.status), ws.ws_row, incoming.disp_status.failure ? '!' : ' ', 0);
 				break;
+			case IO_COMM_CONFIG:
+				eval_config_update(incoming.config.new_conf);
+				break;
 			case IO_COMM_QUIT:
 				exit(incoming.quit.ret_val);
 			}
@@ -178,7 +154,7 @@ void io_proc(int fd_in, int fd_out)
 					break;
 				case IO_WRITING_COMMAND:
 					state = IO_WRITING_MSG;
-					display_command(NULL, 0, ws.ws_row, ' ', 0);
+					display_command(read_buffer, 0, ws.ws_row, ' ', 0);
 					break;
 				}
 				break;
@@ -198,6 +174,7 @@ void io_proc(int fd_in, int fd_out)
 			if((state == IO_WRITING_MSG     && read_length >= sizeof(outgoing.msg_written.new_msg.str)-1) ||
 			   (state == IO_WRITING_COMMAND && read_length >= sizeof(outgoing.cmd.raw_cmd)-1)) {
 			send:
+				read_buffer[read_length] = 0;
 				switch(state) {
 				case IO_WRITING_MSG:
 					outgoing.type = LOGIC_COMM_MSG_WRITTEN;
@@ -241,6 +218,7 @@ void logic_proc(client c, int fd_in, int fd_out)
 	msg_id last_msg;
 	struct logic_comm incoming;
 	struct io_comm outgoing;
+	struct command_result cmd_res;
 
 	poll_fds[0].fd = fd_in;
 	poll_fds[0].events = POLLIN;
@@ -261,10 +239,16 @@ void logic_proc(client c, int fd_in, int fd_out)
 				c.send_message(incoming.msg_written.new_msg);
 				break;
 			case LOGIC_COMM_CMD:
+				cmd_res = exec_command(incoming.cmd.raw_cmd, outgoing.disp_status.status, sizeof(outgoing.disp_status.status));
 				outgoing.type = IO_COMM_DISP_STATUS;
-				outgoing.disp_status.failure = exec_command(incoming.cmd.raw_cmd, outgoing.disp_status.status, sizeof(outgoing.disp_status.status));
+				outgoing.disp_status.failure = cmd_res.type == COMMAND_FAILED;
 				if(! outgoing.disp_status.failure) strncpy(outgoing.disp_status.status, "ok", sizeof(outgoing.disp_status.status));
 				write(fd_out, &outgoing, sizeof(struct io_comm));
+				if(cmd_res.type == COMMAND_UPDATE_CONFIG) {
+					outgoing.type = IO_COMM_CONFIG;
+					outgoing.config.new_conf = cmd_res.config;
+					write(fd_out, &outgoing, sizeof(struct io_comm));
+				}
 				break;
 			case LOGIC_COMM_QUIT:
 				exit(incoming.quit.ret_val);
