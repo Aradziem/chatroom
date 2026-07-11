@@ -4,14 +4,20 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <fstream>
+#include <stdarg.h>
 
 struct username nick = un_from_str("Anonymous");
 std::string ip = "127.0.0.1";
 int port = 6666;
+struct style highlight_msg_id = {.type=COLOR_DEFAULT,.styles=0};
+struct style highlight_msg_time = {.type=COLOR_DEFAULT,.styles=0};
+struct style highlight_msg_time_ms = {.type=COLOR_DEFAULT,.styles=0};
 struct style highlight_msg_author = {.type=COLOR_DEFAULT,.styles=0};
 struct style highlight_msg_text = {.type=COLOR_DEFAULT,.styles=0};
 struct style highlight_command = {.type=COLOR_DEFAULT,.styles=0};
 struct style highlight_command_failure = {.type=COLOR_RGB,.rgb={255,0,0},.styles=0};
+void print_style(struct style c);
+void reset_styles();
 
 #define FAIL(MSG) \
 	do { \
@@ -87,6 +93,15 @@ void eval_config_update(struct update_config config)
 		break;
 	case CONFIG_HIGHLIGHT:
 		switch(config.hi.name) {
+		case CONFIG_HI_MSG_ID:
+			highlight_msg_id = config.hi.value;
+			break;
+		case CONFIG_HI_MSG_TIME:
+			highlight_msg_time = config.hi.value;
+			break;
+		case CONFIG_HI_MSG_TIME_MS:
+			highlight_msg_time_ms = config.hi.value;
+			break;
 		case CONFIG_HI_MSG_AUTHOR:
 			highlight_msg_author = config.hi.value;
 			break;
@@ -103,27 +118,18 @@ void eval_config_update(struct update_config config)
 	}
 }
 
-void print_style(struct style c)
-{
-	switch(c.type) {
-	case COLOR_DEFAULT:
-		printf("\033[39m");
-		break;
-	case COLOR_256:
-		printf("\033[38;5;%dm", c.c256);
-		break;
-	case COLOR_RGB:
-		printf("\033[38;2;%d;%d;%dm", c.rgb.r, c.rgb.g, c.rgb.b);
-		break;
-	}
+void printf_styled(struct style s, char const *fmt, ...) {
+	va_list args;
 
-	if(c.styles & STYLE_BOLD) printf("\033[1m");
-	if(c.styles & STYLE_UNDERLINE) printf("\033[4m");
-}
+	if(s.styles & STYLE_HIDE) return;
 
-void reset_styles()
-{
-	printf("\033[0m");
+	print_style(s);
+
+	va_start(args, fmt);
+	vprintf(fmt, args);
+	va_end(args);
+
+	reset_styles();
 }
 
 struct command_result set(std::vector<char *> argv, char *failure_reason, unsigned int failure_len)
@@ -165,7 +171,16 @@ struct command_result highlight(std::vector<char *> argv, char *failure_reason, 
 	res.config.resize(1);
 	res.config[0].type = CONFIG_HIGHLIGHT;
 
-	if(strcmp(argv[0], "msg_author") == 0) {
+	if(strcmp(argv[0], "msg_id") == 0) {
+		tgt_hi = &highlight_msg_id;
+		res.config[0].hi.name = CONFIG_HI_MSG_ID;
+	} else if(strcmp(argv[0], "msg_time") == 0) {
+		tgt_hi = &highlight_msg_time;
+		res.config[0].hi.name = CONFIG_HI_MSG_TIME;
+	} else if(strcmp(argv[0], "msg_time_ms") == 0) {
+		tgt_hi = &highlight_msg_time_ms;
+		res.config[0].hi.name = CONFIG_HI_MSG_TIME_MS;
+	} else if(strcmp(argv[0], "msg_author") == 0) {
 		tgt_hi = &highlight_msg_author;
 		res.config[0].hi.name = CONFIG_HI_MSG_AUTHOR;
 	} else if(strcmp(argv[0], "msg_text") == 0) {
@@ -197,6 +212,12 @@ struct command_result highlight(std::vector<char *> argv, char *failure_reason, 
 					break;
 				case 'u':
 					tgt_hi->styles |= STYLE_UNDERLINE;
+					break;
+				case 'h':
+					tgt_hi->styles |= STYLE_HIDE;
+					break;
+				case 'H':
+					tgt_hi->styles &= ~STYLE_HIDE;
 					break;
 				default:
 					FAIL("unknown style");
@@ -238,5 +259,28 @@ struct command_result source(std::vector<char *> argv, char *failure_reason, uns
 	}
 
 	return full_res;
+}
+
+void print_style(struct style c)
+{
+	switch(c.type) {
+	case COLOR_DEFAULT:
+		printf("\033[39m");
+		break;
+	case COLOR_256:
+		printf("\033[38;5;%dm", c.c256);
+		break;
+	case COLOR_RGB:
+		printf("\033[38;2;%d;%d;%dm", c.rgb.r, c.rgb.g, c.rgb.b);
+		break;
+	}
+
+	if(c.styles & STYLE_BOLD) printf("\033[1m");
+	if(c.styles & STYLE_UNDERLINE) printf("\033[4m");
+}
+
+void reset_styles()
+{
+	printf("\033[0m");
 }
 
