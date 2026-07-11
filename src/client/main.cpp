@@ -324,39 +324,6 @@ int main(int argc, char **argv) {
 	signal(SIGINT, signal_handler);
 	signal(SIGPIPE, signal_handler);
 
-	for(int i = 1; i < argc; ++i) {
-		if(argv[i][0] == '-') {
-			for(int j = 1; argv[i][j]; ++j) {
-				switch(argv[i][j]) {
-#define ARG_OPT(OPT, STR) \
-					case OPT: \
-						if(i + 1 >= argc) { \
-							cerr << "expected -" << OPT << " <" << STR << ">\n"; \
-							exit(1); \
-						} \
-						conf[STR] = argv[i+1]; \
-						goto argument_end;
-					default:
-						cerr << "unknown -" << argv[i][j] << '\n';
-						exit(1);
-				}
-			}
-		}
-	}
-
-	char *home = getenv("HOME");
-	std::string save_path;
-	if(home) {
-		save_path = home;
-		save_path += STATE_DIR;
-		mkdir(save_path.c_str(), 0775);
-		save_path += SAVE_DIR;
-		mkdir(save_path.c_str(), 0775);
-		save_path += SAVE_FILE;
-	} else {
-		save_path = "/tmp/chatroom-msgs-client";
-	}
-
 	int io_pipe[2];
 	int logic_pipe[2];
 	if(pipe(io_pipe) < 0) {
@@ -376,6 +343,18 @@ int main(int argc, char **argv) {
 		close(io_pipe[0]);
 		close(logic_pipe[1]);
 
+		char *home = getenv("HOME");
+		std::string save_path;
+		if(home) {
+			save_path = home;
+			save_path += STATE_DIR;
+			mkdir(save_path.c_str(), 0775);
+			save_path += SAVE_DIR;
+			mkdir(save_path.c_str(), 0775);
+			save_path += SAVE_FILE;
+		} else {
+			save_path = "/tmp/chatroom-msgs-client";
+		}
 		client c("127.0.0.1", 6666, save_path);
 
 		if(home) {
@@ -397,6 +376,27 @@ int main(int argc, char **argv) {
 					write(io_pipe[1], &c, sizeof(struct io_comm));
 				}
 				delete[] config_cmd;
+			}
+		}
+
+		for(int i = 1; i < argc; ++i) {
+			if(strcmp(argv[i], "-C") == 0) {
+				char failure[256];
+				if(i + 1 >= argc) {
+					std::cerr << "expected command after -C\n";
+					exit(1);
+				}
+				auto res = exec_command(argv[i+1], failure, sizeof(failure));
+				if(res.type == COMMAND_FAILED) {
+					/* TODO: move this to the IO proc */
+					printf("\n\n\n%s\n\n\n", failure);
+				}
+				for(auto uc : res.config) {
+					struct io_comm c;
+					c.type = IO_COMM_CONFIG;
+					c.config.new_conf = uc;
+					write(io_pipe[1], &c, sizeof(struct io_comm));
+				}
 			}
 		}
 
