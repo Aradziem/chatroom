@@ -21,6 +21,8 @@ struct style {
 };
 
 extern struct username nick;
+extern std::string ip;
+extern int port;
 extern struct style highlight_msg_author;
 extern struct style highlight_msg_text;
 extern struct style highlight_command;

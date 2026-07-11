@@ -355,7 +355,7 @@ int main(int argc, char **argv) {
 		} else {
 			save_path = "/tmp/chatroom-msgs-client";
 		}
-		client c("127.0.0.1", 6666, save_path);
+		client c(ip, port, save_path);
 
 		if(home) {
 			char *config_cmd = new char[strlen("source ") + strlen(home) + sizeof(CONFIG_FILE)];
