@@ -19,9 +19,11 @@ void server_connection::accept()
 }
 server_connection::server_connection(int port)
 {
+	int one;
+
 	if((fd = socket(AF_INET,SOCK_STREAM, 0))<0)
 		{
-			std::cerr<<"socket error";
+			perror("socket");
 			exit(1);
 		}
 	client_fd = -1;
@@ -30,14 +32,19 @@ server_connection::server_connection(int port)
 	address.sin_addr.s_addr = INADDR_ANY;
 	address.sin_port = htons(port);
 
+	one = 1;
+	if(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(int)) < 0){
+		perror("setsockopt");
+	}
+
 	if(bind(fd, (struct sockaddr*)& address, sizeof(address))<0)
 		{
-			std::cerr<<"bind error";
+			perror("bind");
 			exit(1);
 		}
 	if(listen(fd,64)<0)
 		{
-			std::cerr<<"listen error";
+			perror("listen");
 			exit(1);
 		}
 
