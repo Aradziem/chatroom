@@ -2,8 +2,14 @@
 
 #include <string.h>
 #include <vector>
+#include <inttypes.h>
+#include <stdio.h>
 
 struct username nick = un_from_str("Anonymous");
+struct style highlight_msg_author = {.type=COLOR_DEFAULT,.styles=0};
+struct style highlight_msg_text = {.type=COLOR_DEFAULT,.styles=0};
+struct style highlight_command = {.type=COLOR_DEFAULT,.styles=0};
+struct style highlight_command_failure = {.type=COLOR_RGB,.rgb={255,0,0},.styles=0};
 
 #define FAIL(MSG) \
 	do { \
@@ -12,17 +18,20 @@ struct username nick = un_from_str("Anonymous");
 		return { .type=COMMAND_FAILED }; \
 	} while(0);
 
-struct command_result set(char **argv, char *failure_reason, unsigned int failure_len);
+struct command_result set(std::vector<char *> argv, char *failure_reason, unsigned int failure_len);
+struct command_result highlight(std::vector<char *> argv, char *failure_reason, unsigned int failure_len);
 
 struct command {
 	char const *name;
-	unsigned int argc;
-	struct command_result (*cmd)(char **argv, char *failure_reason, unsigned int failure_len);
+	int argc;
+	struct command_result (*cmd)(std::vector<char *> argv, char *failure_reason, unsigned int failure_len);
 };
 struct command commands[] = {
-/*    name   argc cmd */
-	{ "set", 2,   set },
-	{ "se",  2,   set },
+/*    name          argc cmd */
+	{ "set",        2,   set },
+	{ "se",         2,   set },
+	{ "highlight",  -1,  highlight },
+	{ "hi",         -1,  highlight },
 };
 
 struct command_result exec_command(char *cmd, char *failure_reason, unsigned int failure_len)
@@ -44,38 +53,144 @@ struct command_result exec_command(char *cmd, char *failure_reason, unsigned int
 	}
 	if(command.name == NULL) FAIL("unknown command");
 
-	argv.reserve(command.argc);
-	for(i = 0; i < command.argc; ++i) {
-		token = strtok(NULL, " \t");
-		if(! token) FAIL("expected more arguments");
+	if(command.argc >= 0) {
+		argv.reserve(command.argc);
+		for(i = 0; i < (unsigned int)command.argc; ++i) {
+			token = strtok(NULL, " \t");
+			if(! token) FAIL("expected more arguments");
 
-		argv.push_back(token);
+			argv.push_back(token);
+		}
+	} else {
+		for(token = strtok(NULL, " \t"); token; token = strtok(NULL, " \t")) {
+			argv.push_back(token);
+		}
 	}
 
-	return command.cmd(argv.data(), failure_reason, failure_len);
+	return command.cmd(argv, failure_reason, failure_len);
 }
 
 void eval_config_update(struct update_config config)
 {
-	switch(config.name) {
-	case CONFIG_NICK:
-		nick = un_from_str(config.value);
+	switch(config.type) {
+	case CONFIG_SET:
+		switch(config.set.name) {
+		case CONFIG_SET_NICK:
+			nick = un_from_str(config.set.value);
+			break;
+		}
 		break;
+	case CONFIG_HIGHLIGHT:
+		switch(config.hi.name) {
+		case CONFIG_HI_MSG_AUTHOR:
+			highlight_msg_author = config.hi.value;
+			break;
+		case CONFIG_HI_MSG_TEXT:
+			highlight_msg_text = config.hi.value;
+			break;
+		case CONFIG_HI_COMMAND:
+			highlight_command = config.hi.value;
+			break;
+		case CONFIG_HI_COMMAND_FAILURE:
+			highlight_command_failure = config.hi.value;
+			break;
+		}
 	}
 }
 
-struct command_result set(char **argv, char *failure_reason, unsigned int failure_len)
+void print_style(struct style c)
+{
+	switch(c.type) {
+	case COLOR_DEFAULT:
+		printf("\033[39m");
+		break;
+	case COLOR_256:
+		printf("\033[38;5;%dm", c.c256);
+		break;
+	case COLOR_RGB:
+		printf("\033[38;2;%d;%d;%dm", c.rgb.r, c.rgb.g, c.rgb.b);
+		break;
+	}
+
+	if(c.styles & STYLE_BOLD) printf("\033[1m");
+	if(c.styles & STYLE_UNDERLINE) printf("\033[4m");
+}
+
+void reset_styles()
+{
+	printf("\033[0m");
+}
+
+struct command_result set(std::vector<char *> argv, char *failure_reason, unsigned int failure_len)
 {
 	struct command_result res;
 
+	res.type = COMMAND_UPDATE_CONFIG;
+	res.config.type = CONFIG_SET;
+
 	if(strcmp(argv[0], "nick") == 0) {
 		nick = un_from_str(argv[1]);
+		res.config.set.name = CONFIG_SET_NICK;
 	} else FAIL("unknown set option");
 
+	strncpy(res.config.set.value, argv[1], sizeof(res.config.set.value)-1);
+	res.config.set.value[sizeof(res.config.set.value)] = 0;
+	return res;
+}
+
+struct command_result highlight(std::vector<char *> argv, char *failure_reason, unsigned int failure_len)
+{
+	struct command_result res;
+	struct style *tgt_hi;
+	unsigned int i;
+	char *it;
+
+	if(argv.size() < 1) FAIL("expected a highlight group");
+
 	res.type = COMMAND_UPDATE_CONFIG;
-	res.config.name = CONFIG_NICK;
-	strncpy(res.config.value, argv[1], sizeof(res.config.value)-1);
-	res.config.value[sizeof(res.config.value)] = 0;
+	res.config.type = CONFIG_HIGHLIGHT;
+
+	if(strcmp(argv[0], "msg_author") == 0) {
+		tgt_hi = &highlight_msg_author;
+		res.config.hi.name = CONFIG_HI_MSG_AUTHOR;
+	} else if(strcmp(argv[0], "msg_text") == 0) {
+		tgt_hi = &highlight_msg_text;
+		res.config.hi.name = CONFIG_HI_MSG_TEXT;
+	} else if(strcmp(argv[0], "command") == 0) {
+		tgt_hi = &highlight_command;
+		res.config.hi.name = CONFIG_HI_COMMAND;
+	} else if(strcmp(argv[0], "command_failure") == 0) {
+		tgt_hi = &highlight_command_failure;
+		res.config.hi.name = CONFIG_HI_COMMAND_FAILURE;
+	} else FAIL("unknown highlight group");
+
+	for(i = 1; i < argv.size(); ++i) {
+		if(strcmp(argv[i], "default") == 0) {
+			tgt_hi->type = COLOR_DEFAULT;
+		} else if(strncmp(argv[i], "c256=", 5) == 0) {
+			tgt_hi->type = COLOR_256;
+			if(sscanf(argv[i]+5, "%" PRIu8, &tgt_hi->c256) < 1) FAIL("expected a number for c256");
+		} else if(strncmp(argv[i], "rgb=", 4) == 0) {
+			tgt_hi->type = COLOR_RGB;
+			if(sscanf(argv[i]+4, "%" PRIu8 ",%" PRIu8 ",%" PRIu8, &tgt_hi->rgb.r, &tgt_hi->rgb.g, &tgt_hi->rgb.b) < 3) FAIL("expected 3 numbers for rgb");
+		} else if(strncmp(argv[i], "style=", 6) == 0) {
+			tgt_hi->styles = 0;
+			for(it = argv[i]+6; *it; ++it) {
+				switch(*it) {
+				case 'b':
+					tgt_hi->styles |= STYLE_BOLD;
+					break;
+				case 'u':
+					tgt_hi->styles |= STYLE_UNDERLINE;
+					break;
+				default:
+					FAIL("unknown style");
+				}
+			}
+		}
+	}
+
+	res.config.hi.value = *tgt_hi;
 	return res;
 }
 

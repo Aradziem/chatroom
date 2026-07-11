@@ -82,11 +82,13 @@ uint32_t get_ms() {
 	return ts.tv_nsec / 1e6;
 }
 
-void display_command(char *cmd, unsigned int len, unsigned int win_h, char preceding_char, int display_cursor)
+void display_command(char *cmd, unsigned int len, unsigned int win_h, char preceding_char, int display_cursor, struct style s)
 {
+	print_style(s);
 	printf("\0337\033[%d;0H%c%.*s", win_h, preceding_char, len, cmd);
 	if(display_cursor) printf(CURSOR);
 	printf("\033[0K\0338");
+	reset_styles();
 	fflush(stdout);
 }
 
@@ -96,7 +98,6 @@ void io_proc(int fd_in, int fd_out)
 	struct pollfd poll_fds[2];
 	struct io_comm incoming;
 	struct logic_comm outgoing;
-	std::string pretty_un;
 	struct winsize ws;
 	enum { IO_WRITING_MSG, IO_WRITING_COMMAND } state;
 	char read_buffer[256];
@@ -114,8 +115,11 @@ void io_proc(int fd_in, int fd_out)
 
 	state = IO_WRITING_MSG;
 	read_length = 0;
-	pretty_un = username_pretty(nick);
-	printf("\r(writing) %s: " CURSOR "\033[0K", pretty_un.c_str());
+	printf("\r(writing) ");
+	print_style(highlight_msg_author);
+	std::cout << username_pretty(nick);
+	reset_styles();
+	printf(": " CURSOR "\033[0K");
 	fflush(stdout);
 	while(1) {
 		ret = poll(poll_fds, sizeof(poll_fds)/sizeof(*poll_fds), -1);
@@ -124,12 +128,23 @@ void io_proc(int fd_in, int fd_out)
 			read(fd_in, &incoming, sizeof(struct io_comm));
 			switch(incoming.type) {
 			case IO_COMM_DISP_MSG:
-				pretty_un = username_pretty(incoming.disp_msg.inc_msg.un);
-				printf("\r%s: %s\033[0K\n", pretty_un.c_str(), incoming.disp_msg.inc_msg.str);
+				printf("\r");
+				print_style(highlight_msg_author);
+				std::cout << username_pretty(incoming.disp_msg.inc_msg.un);
+				reset_styles();
+				printf(": ");
+				print_style(highlight_msg_text);
+				printf("%s", incoming.disp_msg.inc_msg.str);
+				reset_styles();
+				printf("\033[0K");
 				fflush(stdout);
 				break;
 			case IO_COMM_DISP_STATUS:
-				display_command(incoming.disp_status.status, strlen(incoming.disp_status.status), ws.ws_row, incoming.disp_status.failure ? '!' : ' ', 0);
+				if(incoming.disp_status.failure) {
+					display_command(incoming.disp_status.status, strlen(incoming.disp_status.status), ws.ws_row, '!', 0, highlight_command_failure);
+				} else {
+					display_command(incoming.disp_status.status, strlen(incoming.disp_status.status), ws.ws_row, ' ', 0, highlight_command);
+				}
 				break;
 			case IO_COMM_CONFIG:
 				eval_config_update(incoming.config.new_conf);
@@ -162,13 +177,17 @@ void io_proc(int fd_in, int fd_out)
 					break;
 				case IO_WRITING_COMMAND:
 					state = IO_WRITING_MSG;
-					display_command(read_buffer, 0, ws.ws_row, ' ', 0);
+					display_command(read_buffer, 0, ws.ws_row, ' ', 0, highlight_command);
 					break;
 				}
 				break;
 			case ':':
 				if(state == IO_WRITING_MSG && read_length == 0) {
-					printf("\r(writing) %s:\033[0K", pretty_un.c_str());
+					printf("\r(writing) ");
+					print_style(highlight_msg_author);
+					std::cout << username_pretty(nick);
+					reset_styles();
+					printf(": \033[0K");
 					fflush(stdout);
 					state = IO_WRITING_COMMAND;
 					break;
@@ -206,12 +225,19 @@ void io_proc(int fd_in, int fd_out)
 
 		switch(state) {
 		case IO_WRITING_MSG:
-			pretty_un = username_pretty(nick);
-			printf("\r(writing) %s: %.*s" CURSOR "\033[0K", pretty_un.c_str(), read_length, read_buffer);
+			printf("\r(writing) ");
+			print_style(highlight_msg_author);
+			std::cout << username_pretty(nick);
+			reset_styles();
+			printf(": ");
+			print_style(highlight_msg_text);
+			printf("%.*s", read_length, read_buffer);
+			reset_styles();
+			printf(CURSOR "\033[0K");
 			fflush(stdout);
 			break;
 		case IO_WRITING_COMMAND:
-			display_command(read_buffer, read_length, ws.ws_row, ':', 1);
+			display_command(read_buffer, read_length, ws.ws_row, ':', 1, highlight_command);
 			break;
 		}
 
