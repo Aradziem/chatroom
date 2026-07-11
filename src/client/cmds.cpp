@@ -6,6 +6,8 @@
 #include <fstream>
 
 struct username nick = un_from_str("Anonymous");
+std::string ip = "127.0.0.1";
+int port = 6666;
 struct style highlight_msg_author = {.type=COLOR_DEFAULT,.styles=0};
 struct style highlight_msg_text = {.type=COLOR_DEFAULT,.styles=0};
 struct style highlight_command = {.type=COLOR_DEFAULT,.styles=0};
@@ -135,6 +137,14 @@ struct command_result set(std::vector<char *> argv, char *failure_reason, unsign
 	if(strcmp(argv[0], "nick") == 0) {
 		nick = un_from_str(argv[1]);
 		res.config[0].set.name = CONFIG_SET_NICK;
+	} else if(strcmp(argv[0], "ip") == 0) {
+		ip = argv[1];
+		res.config.resize(0);
+		return res;
+	} else if(strcmp(argv[0], "port") == 0) {
+		port = atoi(argv[1]);
+		res.config.resize(0);
+		return res;
 	} else FAIL("unknown set option");
 
 	strncpy(res.config[0].set.value, argv[1], sizeof(res.config[0].set.value)-1);
