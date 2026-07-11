@@ -26,6 +26,7 @@ using namespace std;
 #define CURSOR "\033[7m \033[27m"
 
 struct termios term, orig_term;
+volatile sig_atomic_t signal_raised = 0;
 
 enum io_comm_type { IO_COMM_DISP_MSG, IO_COMM_DISP_STATUS, IO_COMM_CONFIG, IO_COMM_QUIT };
 struct io_comm {
@@ -62,6 +63,11 @@ struct logic_comm {
 		} quit;
 	};
 };
+
+void signal_handler(int)
+{
+	signal_raised = 1;
+}
 
 void cleanup(void) {
 	tcsetattr(STDIN_FILENO, 0, &orig_term);
@@ -206,6 +212,13 @@ void io_proc(int fd_in, int fd_out)
 			display_command(read_buffer, read_length, ws.ws_row, ':', 1);
 			break;
 		}
+
+		if(signal_raised) {
+			outgoing.type = LOGIC_COMM_QUIT;
+			outgoing.quit.ret_val = 1;
+			write(fd_out, &outgoing, sizeof(struct logic_comm));
+			exit(1);
+		}
 	}
 }
 
@@ -266,6 +279,13 @@ void logic_proc(client c, int fd_in, int fd_out)
 				if(m->second.id > last_msg) last_msg = m->second.id;
 			}
 		}
+
+		if(signal_raised) {
+			outgoing.type = IO_COMM_QUIT;
+			outgoing.quit.ret_val = 1;
+			write(fd_out, &outgoing, sizeof(struct logic_comm));
+			exit(1);
+		}
 	}
 }
 
@@ -298,6 +318,9 @@ std::map<std::string, std::string> config()
 
 int main(int argc, char **argv) {
 	std::ios::sync_with_stdio(true);
+
+	signal(SIGINT, signal_handler);
+	signal(SIGPIPE, signal_handler);
 
 	auto conf = config();
 	for(int i = 1; i < argc; ++i) {
