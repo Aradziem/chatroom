@@ -71,25 +71,6 @@ uint32_t get_ms() {
 	return ts.tv_nsec / 1e6;
 }
 
-void display(client* c)
-{
-	static msg_id last_msg = 0;
-
-	while(1)
-	{
-		c->recv_messages(last_msg);
-		for(auto m = c->msgs.msgs.upper_bound(last_msg); m != c->msgs.msgs.end(); ++m)
-		{
-			printf("\r");
-			std::cout << username_pretty(m->second.un) << ": " << m->second.str;
-			printf("\033[0K\n");
-			fflush(stdout);
-			if(m->second.id > last_msg) last_msg = m->second.id;
-		}
-		usleep(100000);
-	}
-}
-
 void display_command(char *cmd, unsigned int len, unsigned int win_h, char preceding_char, int display_cursor)
 {
 	unsigned int cursor_x, cursor_y;
@@ -128,152 +109,6 @@ void display_command(char *cmd, unsigned int len, unsigned int win_h, char prece
 	fflush(stdout);
 }
 
-void command_mode()
-{
-	struct winsize ws;
-	char cmd_buf[2048];
-	struct pollfd pfd;
-	int ret;
-	unsigned int cmd_len;
-	char c;
-	char failure_reason[64];
-
-	ws.ws_row = 24; /* fallback term height */
-	ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws);
-
-	pfd.fd = STDIN_FILENO;
-	pfd.events = POLLIN;
-
-	display_command(cmd_buf, 0, ws.ws_row, ':', 1);
-	for(cmd_len = 0; cmd_len < sizeof(cmd_buf)-1;) {
-		ret = poll(&pfd, 1, 10);
-		if(ret > 0 && pfd.revents & POLLIN) {
-			read(STDIN_FILENO, &c, 1);
-
-			switch(c) {
-			case '\n':
-			case '\r':
-			case 4:
-				goto exec;
-			case 127:
-				if(cmd_len) --cmd_len;
-				break;
-			case 21:
-				cmd_len = 0;
-				break;
-			case 3:
-			case 27:
-				display_command(cmd_buf, 0, ws.ws_row, ' ', 0);
-				return;
-			default:
-				cmd_buf[cmd_len++] = c;
-				break;
-			}
-			display_command(cmd_buf, cmd_len, ws.ws_row, ':', 1);
-		}
-	}
-
-exec:
-	cmd_buf[cmd_len] = 0;
-	if(exec_command(cmd_buf, failure_reason, sizeof(failure_reason))) {
-		display_command(failure_reason, strlen(failure_reason), ws.ws_row, '!', 0);
-	} else {
-		display_command(cmd_buf, 0, ws.ws_row, ' ', 0);
-	}
-}
-
-void read_message(client *clnt)
-{
-	message msg;
-	int idx = 0;
-	int ret;
-	char c;
-	struct pollfd pfd;
-
-	pfd.fd = STDIN_FILENO;
-	pfd.events = POLLIN;
-
-	while(1) {
-		printf("\r");
-		cout << username_pretty(nick) << ": ";
-		printf(CURSOR);
-		
-		for(idx = 0; idx < 63;) {
-			ret = poll(&pfd, 1, 10);
-			if(ret > 0 && pfd.revents & POLLIN) {
-				read(STDIN_FILENO, &c, 1);
-
-				switch(c) {
-				case '\n':
-				case '\r':
-					goto send;
-				case 127:
-					if(idx) --idx;
-					break;
-				case 21:
-					idx = 0;
-					break;
-				case 3:
-				case 4:
-				case 27:
-					return;
-				case ':':
-					if(idx == 0) {
-						printf("\r");
-						cout << username_pretty(nick) << ": ";
-						printf("%.*s\033[0K", idx, msg.str);
-						fflush(stdout);
-						command_mode();
-						break;
-					}
-					/* FALLTHROUGH */
-				default:
-					msg.str[idx++] = c;
-					break;
-				}
-			}
-			printf("\r");
-			cout << username_pretty(nick) << ": ";
-			printf("%.*s\033[0K" CURSOR, idx, msg.str);
-			fflush(stdout);
-		}
-
-	send:
-		msg.str[idx] = 0;
-		msg.send_time = time(0);
-		msg.ms = get_ms();
-		msg.un = nick;
-		clnt->send_message(msg);
-	}
-}
-
-std::map<std::string, std::string> config()
-{
-	std::map<std::string, std::string> m;
-	char *home = getenv("HOME");
-	if(home) {
-		char *config_path = new char[strlen(home) + sizeof(CONFIG_FILE)];
-		if(config_path) {
-			strcpy(config_path, home);
-			strcat(config_path, CONFIG_FILE);
-			std::ifstream config(config_path);
-			if(config.is_open()) {
-				std::string ln;
-				while(std::getline(config, ln)) {
-					if(ln[0] == '#') continue;
-					auto d = ln.find('=');
-					if(d != std::string::npos) {
-						m[ln.substr(0, d)] = ln.substr(d+1);
-					}
-				}
-			}
-		}
-		delete[] config_path;
-	}
-
-	return m;
-}
-
 void io_proc(int fd_in, int fd_out)
 {
 	int ret;
@@ -298,23 +133,25 @@ void io_proc(int fd_in, int fd_out)
 
 	state = IO_WRITING_MSG;
 	read_length = 0;
+	pretty_un = username_pretty(nick);
+	printf("\r(writing) %s: " CURSOR "\033[0K", pretty_un.c_str());
+	fflush(stdout);
 	while(1) {
 		ret = poll(poll_fds, sizeof(poll_fds)/sizeof(*poll_fds), -1);
 		if(ret > 0 && poll_fds[0].revents & POLLIN) {
 			/* pipe */
-			while(read(fd_in, &incoming, sizeof(struct io_comm)) > 0) {
-				switch(incoming.type) {
-				case IO_COMM_DISP_MSG:
-					pretty_un = username_pretty(incoming.disp_msg.inc_msg.un);
-					printf("\r%s: %s\033[0K\n", pretty_un.c_str(), incoming.disp_msg.inc_msg.str);
-					fflush(stdout);
-					break;
-				case IO_COMM_DISP_STATUS:
-					display_command(incoming.disp_status.status, strlen(incoming.disp_status.status), ws.ws_row, incoming.disp_status.failure ? '!' : ' ', 0);
-					break;
-				case IO_COMM_QUIT:
-					exit(incoming.quit.ret_val);
-				}
+			read(fd_in, &incoming, sizeof(struct io_comm));
+			switch(incoming.type) {
+			case IO_COMM_DISP_MSG:
+				pretty_un = username_pretty(incoming.disp_msg.inc_msg.un);
+				printf("\r%s: %s\033[0K\n", pretty_un.c_str(), incoming.disp_msg.inc_msg.str);
+				fflush(stdout);
+				break;
+			case IO_COMM_DISP_STATUS:
+				display_command(incoming.disp_status.status, strlen(incoming.disp_status.status), ws.ws_row, incoming.disp_status.failure ? '!' : ' ', 0);
+				break;
+			case IO_COMM_QUIT:
+				exit(incoming.quit.ret_val);
 			}
 		}
 		if(ret > 0 && poll_fds[1].revents & POLLIN) {
@@ -341,12 +178,13 @@ void io_proc(int fd_in, int fd_out)
 					break;
 				case IO_WRITING_COMMAND:
 					state = IO_WRITING_MSG;
+					display_command(NULL, 0, ws.ws_row, ' ', 0);
 					break;
 				}
 				break;
 			case ':':
 				if(state == IO_WRITING_MSG && read_length == 0) {
-					printf("\r");
+					printf("\r(writing) %s:\033[0K", pretty_un.c_str());
 					fflush(stdout);
 					state = IO_WRITING_COMMAND;
 					break;
@@ -368,11 +206,14 @@ void io_proc(int fd_in, int fd_out)
 					strcpy(outgoing.msg_written.new_msg.str, read_buffer);
 					outgoing.msg_written.new_msg.un = nick;
 					write(fd_out, &outgoing, sizeof(struct logic_comm));
+					read_length = 0;
 					break;
 				case IO_WRITING_COMMAND:
 					outgoing.type = LOGIC_COMM_CMD;
 					strcpy(outgoing.cmd.raw_cmd, read_buffer);
 					write(fd_out, &outgoing, sizeof(struct logic_comm));
+					read_length = 0;
+					state = IO_WRITING_MSG;
 					break;
 				}
 			}
@@ -406,7 +247,7 @@ void logic_proc(client c, int fd_in, int fd_out)
 
 	poll_fds[1].fd = timerfd_create(CLOCK_MONOTONIC, 0);
 	its = {.it_interval = {.tv_sec = 0, .tv_nsec = 100 * 1000000}, .it_value = {.tv_sec = 0, .tv_nsec = 100 * 1000000}};
-	timerfd_settime(poll_fds[1].events, 0, &its, NULL);
+	timerfd_settime(poll_fds[1].fd, 0, &its, NULL);
 	poll_fds[1].events = POLLIN;
 
 	last_msg = 0;
@@ -414,20 +255,19 @@ void logic_proc(client c, int fd_in, int fd_out)
 		ret = poll(poll_fds, sizeof(poll_fds)/sizeof(*poll_fds), -1);
 		if(ret > 0 && poll_fds[0].revents & POLLIN) {
 			/* pipe */
-			while(read(fd_in, &incoming, sizeof(struct logic_comm)) > 0) {
-				switch(incoming.type) {
-				case LOGIC_COMM_MSG_WRITTEN:
-					c.send_message(incoming.msg_written.new_msg);
-					break;
-				case LOGIC_COMM_CMD:
-					outgoing.type = IO_COMM_DISP_STATUS;
-					outgoing.disp_status.failure = exec_command(incoming.cmd.raw_cmd, outgoing.disp_status.status, sizeof(outgoing.disp_status.status));
-					if(! outgoing.disp_status.failure) strncpy(outgoing.disp_status.status, "ok", sizeof(outgoing.disp_status.status));
-					write(fd_out, &outgoing, sizeof(struct io_comm));
-					break;
-				case LOGIC_COMM_QUIT:
-					exit(incoming.quit.ret_val);
-				}
+			read(fd_in, &incoming, sizeof(struct logic_comm));
+			switch(incoming.type) {
+			case LOGIC_COMM_MSG_WRITTEN:
+				c.send_message(incoming.msg_written.new_msg);
+				break;
+			case LOGIC_COMM_CMD:
+				outgoing.type = IO_COMM_DISP_STATUS;
+				outgoing.disp_status.failure = exec_command(incoming.cmd.raw_cmd, outgoing.disp_status.status, sizeof(outgoing.disp_status.status));
+				if(! outgoing.disp_status.failure) strncpy(outgoing.disp_status.status, "ok", sizeof(outgoing.disp_status.status));
+				write(fd_out, &outgoing, sizeof(struct io_comm));
+				break;
+			case LOGIC_COMM_QUIT:
+				exit(incoming.quit.ret_val);
 			}
 		}
 		if(ret > 0 && poll_fds[1].revents & POLLIN) {
@@ -439,9 +279,37 @@ void logic_proc(client c, int fd_in, int fd_out)
 				outgoing.type = IO_COMM_DISP_MSG;
 				outgoing.disp_msg.inc_msg = m->second;
 				write(fd_out, &outgoing, sizeof(struct io_comm));
+				if(m->second.id > last_msg) last_msg = m->second.id;
 			}
 		}
 	}
+}
+
+std::map<std::string, std::string> config()
+{
+	std::map<std::string, std::string> m;
+	char *home = getenv("HOME");
+	if(home) {
+		char *config_path = new char[strlen(home) + sizeof(CONFIG_FILE)];
+		if(config_path) {
+			strcpy(config_path, home);
+			strcat(config_path, CONFIG_FILE);
+			std::ifstream config(config_path);
+			if(config.is_open()) {
+				std::string ln;
+				while(std::getline(config, ln)) {
+					if(ln[0] == '#') continue;
+					auto d = ln.find('=');
+					if(d != std::string::npos) {
+						m[ln.substr(0, d)] = ln.substr(d+1);
+					}
+				}
+			}
+		}
+		delete[] config_path;
+	}
+
+	return m;
 }
 
 int main(int argc, char **argv) {
