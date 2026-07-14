@@ -143,7 +143,7 @@ void io_proc(int fd_in, int fd_out)
 	display_msg("(writing) ", 0, time(0), get_ms(), nick, read_buffer, read_length, 1);
 	fflush(stdout);
 	while(1) {
-		ret = poll(poll_fds, sizeof(poll_fds)/sizeof(*poll_fds), -1);
+		ret = poll(poll_fds, sizeof(poll_fds)/sizeof(*poll_fds), 1);
 		if(ret > 0 && poll_fds[0].revents & POLLIN) {
 			/* pipe */
 			read(fd_in, &incoming, sizeof(struct io_comm));
