@@ -189,13 +189,17 @@ void io_proc(int fd_in, int fd_out)
 				break;
 			case 3:
 			case 27:
-				if(read(STDIN_FILENO, &c, 1) && read(STDIN_FILENO, &c, 1)) 
+				ret = poll(poll_fds, sizeof(poll_fds)/sizeof(*poll_fds), 1);
+				if(ret && read(STDIN_FILENO, &c, 1) && c == '[') 
 				{
+					ret = poll(poll_fds, sizeof(poll_fds)/sizeof(*poll_fds), 1);
 					//do not crash on arrow keys
-					if(c == 'A' || c == 'B' || c == 'C' || c == 'D')
+					if(ret && read(STDIN_FILENO, &c, 1)&& (c == 'A' || c == 'B' || c == 'C' || c == 'D'))
 					{
 						break;
 					}
+					//FIXME I guess this means something if program gets here and it should be handled
+					//i. e. no letter after [
 				}
 				switch(state) {
 				case IO_WRITING_MSG:
