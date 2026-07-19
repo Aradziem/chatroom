@@ -205,10 +205,10 @@ struct command_result highlight(std::vector<char *> argv, char *failure_reason, 
 			tgt_hi->type = COLOR_DEFAULT;
 		} else if(strncmp(argv[i], "c256=", 5) == 0) {
 			tgt_hi->type = COLOR_256;
-			if(sscanf(argv[i]+5, "%hh" PRIu8, &tgt_hi->c256) < 1) FAIL("expected a number for c256");
+			if(sscanf(argv[i]+5, "%hhu" , &tgt_hi->c256) < 1) FAIL("expected a number for c256");
 		} else if(strncmp(argv[i], "rgb=", 4) == 0) {
 			tgt_hi->type = COLOR_RGB;
-			if(sscanf(argv[i]+4, "%hh" PRIu8 ",%hh" PRIu8 ",%hh" PRIu8, &tgt_hi->rgb.r, &tgt_hi->rgb.g, &tgt_hi->rgb.b) < 3) FAIL("expected 3 numbers for rgb");
+			if(sscanf(argv[i]+4, "%hhu ,%hhu ,%hhu", &tgt_hi->rgb.r, &tgt_hi->rgb.g, &tgt_hi->rgb.b) < 3) FAIL("expected 3 numbers for rgb");
 		} else if(strncmp(argv[i], "style=", 6) == 0) {
 			tgt_hi->styles = 0;
 			for(it = argv[i]+6; *it; ++it) {
