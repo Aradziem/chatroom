@@ -32,9 +32,10 @@ extern struct style highlight_msg_text;
 extern struct style highlight_command;
 extern struct style highlight_command_failure;
 extern long int fetch_timeout_ms;
+extern long int key_arrival_timeout;
 
 enum config_type { CONFIG_SET, CONFIG_HIGHLIGHT };
-enum config_set_name { CONFIG_SET_NICK };
+enum config_set_name { CONFIG_SET_NICK, CONFIG_SET_KEY_TIMEOUT };
 enum config_hi_name { CONFIG_HI_MSG_ID, CONFIG_HI_MSG_TIME, CONFIG_HI_MSG_TIME_MS, CONFIG_HI_MSG_AUTHOR, CONFIG_HI_MSG_TEXT, CONFIG_HI_COMMAND, CONFIG_HI_COMMAND_FAILURE };
 struct update_config {
 	enum config_type type;
