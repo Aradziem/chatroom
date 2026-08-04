@@ -144,7 +144,7 @@ void io_proc(int fd_in, int fd_out)
 	poll_fds[1].events = POLLIN;
 
 	state = IO_WRITING_MSG;
-	read_length = 0;
+	read_length = len_csi_buf = 0;
 	control_sequence = IO_INPUT_NORM;
 	display_msg("(writing) ", 0, time(0), get_ms(), nick, read_buffer, read_length, 1);
 	fflush(stdout);
@@ -248,6 +248,7 @@ void io_proc(int fd_in, int fd_out)
 				break;
 			case IO_INPUT_CSI:
 				csi_buffer[len_csi_buf++] = c;
+				//3 char sequnces
 				if(strncmp(csi_buffer, "\033[A", len_csi_buf) == 0) {
 					/* UP ARROW */
 					control_sequence = IO_INPUT_NORM;
@@ -259,6 +260,42 @@ void io_proc(int fd_in, int fd_out)
 					control_sequence = IO_INPUT_NORM;
 				} else if(strncmp(csi_buffer, "\033[D", len_csi_buf) == 0) {
 					/* LEFT ARROW */
+					control_sequence = IO_INPUT_NORM;
+				//4 char sequences
+				} else if(len_csi_buf < 4){
+					break;
+				} else if(strncmp(csi_buffer, "\033[5~", len_csi_buf) == 0) {
+					/* PAGE UP */
+					control_sequence = IO_INPUT_NORM;
+				} else if(strncmp(csi_buffer, "\033[6~", len_csi_buf) == 0) {
+					/* PAGE DOWN */
+					control_sequence = IO_INPUT_NORM;
+				//5 char sequences
+				} else if(len_csi_buf < 5){
+					break;
+				} else if(strncmp(csi_buffer, "\033[15~", len_csi_buf) == 0) {
+					/* F5 key*/
+					control_sequence = IO_INPUT_NORM;
+				} else if(strncmp(csi_buffer, "\033[17~", len_csi_buf) == 0) {
+					/* F6 key (yes, It's 2 more)*/
+					control_sequence = IO_INPUT_NORM;
+				} else if(strncmp(csi_buffer, "\033[18~", len_csi_buf) == 0) {
+					/* F7 key*/
+					control_sequence = IO_INPUT_NORM;
+				} else if(strncmp(csi_buffer, "\033[19~", len_csi_buf) == 0) {
+					/* F8 key */
+					control_sequence = IO_INPUT_NORM;
+				} else if(strncmp(csi_buffer, "\033[20~", len_csi_buf) == 0) {
+					/* F9 key */
+					control_sequence = IO_INPUT_NORM;
+				} else if(strncmp(csi_buffer, "\033[21~", len_csi_buf) == 0) {
+					/* F10 key */
+					control_sequence = IO_INPUT_NORM;
+				} else if(strncmp(csi_buffer, "\033[23~", len_csi_buf) == 0) {
+					/* F11 key */
+					control_sequence = IO_INPUT_NORM;
+				} else if(strncmp(csi_buffer, "\033[24~", len_csi_buf) == 0) {
+					/* F12 key */
 					control_sequence = IO_INPUT_NORM;
 				} else if(len_csi_buf == sizeof(csi_buffer)) {
 					/* prevent buffer overflow */
