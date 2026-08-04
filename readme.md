@@ -14,6 +14,7 @@ There are currently 3 commands:
     - `set ip <ip>` sets the server IP address. Cannot be used at runtime
     - `set port <port>` sets the server port. Cannot be used at runtime
     - `set fetch_timeout <ms>` sets the refresh message interval in milliseconds. Cannot be used at runtime
+    - `set key_arrival_timeout <ms>` your description
 2. `highlight` (alias: `hi`)  
     A highlight command has two sections: the highlight group and the color/styles.
     - `highlight msg_id <display>` sets the rendering for the message ID, printed before every message
@@ -35,4 +36,5 @@ There are currently 3 commands:
     for example, `style=b` sets the rendering to "bold, not underlined, not hidden"
 3. `source` (alias: `so`)
     - `source <file>` reads a file, then executes all nonempty, not beginning with `'#'` lines as commands. At program startup, `source ~/.chatroomrc` is automatically executed
+
 
