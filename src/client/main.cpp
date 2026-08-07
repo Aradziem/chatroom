@@ -248,57 +248,54 @@ void io_proc(int fd_in, int fd_out)
 				break;
 			case IO_INPUT_CSI:
 				csi_buffer[len_csi_buf++] = c;
-				//3 char sequnces
-				if(strncmp(csi_buffer, "\033[A", len_csi_buf) == 0) {
+#define SEQ(STR) (len_csi_buf == strlen(STR) && strncmp(csi_buffer, STR, len_csi_buf) == 0)
+				if(SEQ("\033[A")) {
 					/* UP ARROW */
 					control_sequence = IO_INPUT_NORM;
-				} else if(strncmp(csi_buffer, "\033[B", len_csi_buf) == 0) {
+				} else if(SEQ("\033[B")) {
 					/* DOWN ARROW */
 					control_sequence = IO_INPUT_NORM;
-				} else if(strncmp(csi_buffer, "\033[C", len_csi_buf) == 0) {
+				} else if(SEQ("\033[C")) {
 					/* RIGHT ARROW */
 					control_sequence = IO_INPUT_NORM;
-				} else if(strncmp(csi_buffer, "\033[D", len_csi_buf) == 0) {
+				} else if(SEQ("\033[D")) {
 					/* LEFT ARROW */
 					control_sequence = IO_INPUT_NORM;
-				//4 char sequences
-				} else if(len_csi_buf < 4){
-				} else if(strncmp(csi_buffer, "\033[5~", len_csi_buf) == 0) {
+				} else if(SEQ("\033[5~")) {
 					/* PAGE UP */
 					control_sequence = IO_INPUT_NORM;
-				} else if(strncmp(csi_buffer, "\033[6~", len_csi_buf) == 0) {
+				} else if(SEQ("\033[6~")) {
 					/* PAGE DOWN */
 					control_sequence = IO_INPUT_NORM;
-				//5 char sequences
-				} else if(len_csi_buf < 5){
-				} else if(strncmp(csi_buffer, "\033[15~", len_csi_buf) == 0) {
+				} else if(SEQ("\033[15~")) {
 					/* F5 key*/
 					control_sequence = IO_INPUT_NORM;
-				} else if(strncmp(csi_buffer, "\033[17~", len_csi_buf) == 0) {
+				} else if(SEQ("\033[17~")) {
 					/* F6 key (yes, It's 2 more)*/
 					control_sequence = IO_INPUT_NORM;
-				} else if(strncmp(csi_buffer, "\033[18~", len_csi_buf) == 0) {
+				} else if(SEQ("\033[18~")) {
 					/* F7 key*/
 					control_sequence = IO_INPUT_NORM;
-				} else if(strncmp(csi_buffer, "\033[19~", len_csi_buf) == 0) {
+				} else if(SEQ("\033[19~")) {
 					/* F8 key */
 					control_sequence = IO_INPUT_NORM;
-				} else if(strncmp(csi_buffer, "\033[20~", len_csi_buf) == 0) {
+				} else if(SEQ("\033[20~")) {
 					/* F9 key */
 					control_sequence = IO_INPUT_NORM;
-				} else if(strncmp(csi_buffer, "\033[21~", len_csi_buf) == 0) {
+				} else if(SEQ("\033[21~")) {
 					/* F10 key */
 					control_sequence = IO_INPUT_NORM;
-				} else if(strncmp(csi_buffer, "\033[23~", len_csi_buf) == 0) {
+				} else if(SEQ("\033[23~")) {
 					/* F11 key */
 					control_sequence = IO_INPUT_NORM;
-				} else if(strncmp(csi_buffer, "\033[24~", len_csi_buf) == 0) {
+				} else if(SEQ("\033[24~")) {
 					/* F12 key */
 					control_sequence = IO_INPUT_NORM;
 				} else if(len_csi_buf == sizeof(csi_buffer)) {
 					/* prevent buffer overflow */
 					control_sequence = IO_INPUT_NORM;
 				}
+#undef SEQ
 				break;
 			case IO_INPUT_SS3:
 				csi_buffer[len_csi_buf++] = c;
