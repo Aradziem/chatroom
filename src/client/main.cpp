@@ -263,7 +263,6 @@ void io_proc(int fd_in, int fd_out)
 					control_sequence = IO_INPUT_NORM;
 				//4 char sequences
 				} else if(len_csi_buf < 4){
-					break;
 				} else if(strncmp(csi_buffer, "\033[5~", len_csi_buf) == 0) {
 					/* PAGE UP */
 					control_sequence = IO_INPUT_NORM;
@@ -272,7 +271,6 @@ void io_proc(int fd_in, int fd_out)
 					control_sequence = IO_INPUT_NORM;
 				//5 char sequences
 				} else if(len_csi_buf < 5){
-					break;
 				} else if(strncmp(csi_buffer, "\033[15~", len_csi_buf) == 0) {
 					/* F5 key*/
 					control_sequence = IO_INPUT_NORM;
