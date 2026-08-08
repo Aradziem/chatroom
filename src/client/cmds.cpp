@@ -17,6 +17,7 @@ struct style highlight_msg_text = {.type=COLOR_DEFAULT,.styles=0};
 struct style highlight_command = {.type=COLOR_DEFAULT,.styles=0};
 struct style highlight_command_failure = {.type=COLOR_RGB,.rgb={255,0,0},.styles=0};
 long int fetch_timeout_ms = 100;
+long int key_arrival_timeout = 200;
 
 #define FAIL(MSG) \
 	do { \
@@ -91,6 +92,9 @@ void eval_config_update(struct update_config config)
 		case CONFIG_SET_NICK:
 			nick = un_from_str(config.set.value);
 			break;
+		case CONFIG_SET_KEY_TIMEOUT:
+			key_arrival_timeout = atoll(config.set.value);
+			break;
 		}
 		break;
 	case CONFIG_HIGHLIGHT:
@@ -157,6 +161,9 @@ struct command_result set(std::vector<char *> argv, char *failure_reason, unsign
 		fetch_timeout_ms = atoll(argv[1]);
 		res.config.resize(0);
 		return res;
+	} else if(strcmp(argv[0], "key_arrival_timeout") == 0) {
+		key_arrival_timeout = atoll(argv[1]);
+		res.config[0].set.name = CONFIG_SET_KEY_TIMEOUT;
 	} else FAIL("unknown set option");
 
 	strncpy(res.config[0].set.value, argv[1], sizeof(res.config[0].set.value)-1);
@@ -205,10 +212,10 @@ struct command_result highlight(std::vector<char *> argv, char *failure_reason, 
 			tgt_hi->type = COLOR_DEFAULT;
 		} else if(strncmp(argv[i], "c256=", 5) == 0) {
 			tgt_hi->type = COLOR_256;
-			if(sscanf(argv[i]+5, "%" PRIu8, &tgt_hi->c256) < 1) FAIL("expected a number for c256");
+			if(sscanf(argv[i]+5, "%" SCNu8, &tgt_hi->c256) < 1) FAIL("expected a number for c256");
 		} else if(strncmp(argv[i], "rgb=", 4) == 0) {
 			tgt_hi->type = COLOR_RGB;
-			if(sscanf(argv[i]+4, "%" PRIu8 ",%" PRIu8 ",%" PRIu8, &tgt_hi->rgb.r, &tgt_hi->rgb.g, &tgt_hi->rgb.b) < 3) FAIL("expected 3 numbers for rgb");
+			if(sscanf(argv[i]+4, "%" SCNu8 " ,%" SCNu8 " ,%" SCNu8 "", &tgt_hi->rgb.r, &tgt_hi->rgb.g, &tgt_hi->rgb.b) < 3) FAIL("expected 3 numbers for rgb");
 		} else if(strncmp(argv[i], "style=", 6) == 0) {
 			tgt_hi->styles = 0;
 			for(it = argv[i]+6; *it; ++it) {

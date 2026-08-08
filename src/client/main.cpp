@@ -128,6 +128,11 @@ void io_proc(int fd_in, int fd_out)
 	char read_buffer[256];
 	unsigned int read_length;
 	char c;
+	enum { IO_INPUT_NORM, IO_INPUT_ESC, IO_INPUT_CSI, IO_INPUT_SS3 } control_sequence;
+	unsigned int esc_timeout;
+	char csi_buffer[32];
+	unsigned int len_csi_buf;
+	unsigned int i;
 
 	ws.ws_row = 24; /* fallback term height */
 	ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws);
@@ -139,7 +144,8 @@ void io_proc(int fd_in, int fd_out)
 	poll_fds[1].events = POLLIN;
 
 	state = IO_WRITING_MSG;
-	read_length = 0;
+	read_length = len_csi_buf = 0;
+	control_sequence = IO_INPUT_NORM;
 	display_msg("(writing) ", 0, time(0), get_ms(), nick, read_buffer, read_length, 1);
 	fflush(stdout);
 	while(1) {
@@ -177,42 +183,143 @@ void io_proc(int fd_in, int fd_out)
 		if(ret > 0 && poll_fds[1].revents & POLLIN) {
 			/* stdin */
 			read(STDIN_FILENO, &c, 1);
-			switch(c) {
-			case '\n':
-			case '\r':
-				goto send;
-			case 127:
-				if(read_length) --read_length;
-				break;
-			case 21:
-				read_length = 0;
-				break;
-			case 3:
-			case 27:
-				switch(state) {
-				case IO_WRITING_MSG:
-					outgoing.type = LOGIC_COMM_QUIT;
-					outgoing.quit.ret_val = 0;
-					write(fd_out, &outgoing, sizeof(struct logic_comm));
-					exit(0);
-					break;
-				case IO_WRITING_COMMAND:
-					state = IO_WRITING_MSG;
-					display_command(read_buffer, 0, ws.ws_row, ' ', 0, highlight_command);
-					break;
+#define HANDLE_CHARACTER(CHAR) \
+	switch(CHAR) { \
+	case '\n': \
+	case '\r': \
+		goto send; \
+	case 127: \
+		if(read_length) --read_length; \
+		break; \
+	case 21: \
+		read_length = 0; \
+		break; \
+	case 27: \
+	case 3: \
+		switch(state) { \
+		case IO_WRITING_MSG: \
+			outgoing.type = LOGIC_COMM_QUIT; \
+			outgoing.quit.ret_val = 0; \
+			write(fd_out, &outgoing, sizeof(struct logic_comm)); \
+			exit(0); \
+			break; \
+		case IO_WRITING_COMMAND: \
+			state = IO_WRITING_MSG; \
+			display_command(read_buffer, 0, ws.ws_row, ' ', 0, highlight_command); \
+			break; \
+		} \
+		break; \
+	case ':': \
+		if(state == IO_WRITING_MSG && read_length == 0) { \
+			printf("\r\033[0K"); \
+			fflush(stdout); \
+			state = IO_WRITING_COMMAND; \
+			break; \
+		} \
+		/* FALLTHROUGH */ \
+	default: \
+		read_buffer[read_length++] = CHAR; \
+		break; \
+	}
+			switch(control_sequence) {
+			case IO_INPUT_NORM:
+				if(c != 27) {
+					HANDLE_CHARACTER(c);
+				} else {
+					control_sequence = IO_INPUT_ESC;
+					csi_buffer[0] = 27;
+					len_csi_buf = 1;
 				}
 				break;
-			case ':':
-				if(state == IO_WRITING_MSG && read_length == 0) {
-					printf("\r\033[0K");
-					fflush(stdout);
-					state = IO_WRITING_COMMAND;
-					break;
+			case IO_INPUT_ESC:
+				if(c == '[') {
+					control_sequence = IO_INPUT_CSI;
+					csi_buffer[1] = '[';
+					len_csi_buf = 2;
+				} else if(c == 'O') {
+					control_sequence = IO_INPUT_SS3;
+					csi_buffer[1] = 'O';
+					len_csi_buf = 2;
+				} else {
+					HANDLE_CHARACTER(27);
+					HANDLE_CHARACTER(c);
+					control_sequence = IO_INPUT_NORM;
 				}
-				/* FALLTHROUGH */
-			default:
-				read_buffer[read_length++] = c;
 				break;
+			case IO_INPUT_CSI:
+				csi_buffer[len_csi_buf++] = c;
+#define SEQ(STR) (len_csi_buf == strlen(STR) && strncmp(csi_buffer, STR, len_csi_buf) == 0)
+				if(SEQ("\033[A")) {
+					/* UP ARROW */
+					control_sequence = IO_INPUT_NORM;
+				} else if(SEQ("\033[B")) {
+					/* DOWN ARROW */
+					control_sequence = IO_INPUT_NORM;
+				} else if(SEQ("\033[C")) {
+					/* RIGHT ARROW */
+					control_sequence = IO_INPUT_NORM;
+				} else if(SEQ("\033[D")) {
+					/* LEFT ARROW */
+					control_sequence = IO_INPUT_NORM;
+				} else if(SEQ("\033[5~")) {
+					/* PAGE UP */
+					control_sequence = IO_INPUT_NORM;
+				} else if(SEQ("\033[6~")) {
+					/* PAGE DOWN */
+					control_sequence = IO_INPUT_NORM;
+				} else if(SEQ("\033[15~")) {
+					/* F5 key*/
+					control_sequence = IO_INPUT_NORM;
+				} else if(SEQ("\033[17~")) {
+					/* F6 key (yes, It's 2 more)*/
+					control_sequence = IO_INPUT_NORM;
+				} else if(SEQ("\033[18~")) {
+					/* F7 key*/
+					control_sequence = IO_INPUT_NORM;
+				} else if(SEQ("\033[19~")) {
+					/* F8 key */
+					control_sequence = IO_INPUT_NORM;
+				} else if(SEQ("\033[20~")) {
+					/* F9 key */
+					control_sequence = IO_INPUT_NORM;
+				} else if(SEQ("\033[21~")) {
+					/* F10 key */
+					control_sequence = IO_INPUT_NORM;
+				} else if(SEQ("\033[23~")) {
+					/* F11 key */
+					control_sequence = IO_INPUT_NORM;
+				} else if(SEQ("\033[24~")) {
+					/* F12 key */
+					control_sequence = IO_INPUT_NORM;
+				} else if(len_csi_buf == sizeof(csi_buffer)) {
+					/* prevent buffer overflow */
+					control_sequence = IO_INPUT_NORM;
+				}
+#undef SEQ
+				break;
+			case IO_INPUT_SS3:
+				csi_buffer[len_csi_buf++] = c;
+				if(strncmp(csi_buffer, "\033OP", len_csi_buf) == 0) {
+					/* f1 KEY */
+					control_sequence = IO_INPUT_NORM;
+				} else if(strncmp(csi_buffer, "\033OQ", len_csi_buf) == 0) {
+					/* f2 KEY */
+					control_sequence = IO_INPUT_NORM;
+				} else if(strncmp(csi_buffer, "\033OR", len_csi_buf) == 0) {
+					/* f3 KEY */
+					control_sequence = IO_INPUT_NORM;
+				} else if(strncmp(csi_buffer, "\033OS", len_csi_buf) == 0) {
+					/* f4 KEY */
+					control_sequence = IO_INPUT_NORM;
+				} else if(len_csi_buf == sizeof(csi_buffer)) {
+					/* prevent buffer overflow */
+					control_sequence = IO_INPUT_NORM;
+				}
+				break;
+			}
+
+			if(control_sequence != IO_INPUT_NORM) {
+				esc_timeout = key_arrival_timeout;
 			}
 
 			if((state == IO_WRITING_MSG     && read_length >= sizeof(outgoing.msg_written.new_msg.str)-1) ||
@@ -236,6 +343,17 @@ void io_proc(int fd_in, int fd_out)
 					read_length = 0;
 					state = IO_WRITING_MSG;
 					break;
+				}
+			}
+		} else {
+			if(control_sequence != IO_INPUT_NORM) {
+				--esc_timeout;
+				if(esc_timeout == 0) {
+					control_sequence = IO_INPUT_NORM;
+					for(i = 0; i < len_csi_buf; ++i) {
+						HANDLE_CHARACTER(csi_buffer[i]);
+#undef HANDLE_CHARACTER
+					}
 				}
 			}
 		}
@@ -327,7 +445,8 @@ void logic_proc(client c, int fd_in, int fd_out)
 	}
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv) 
+{
 	std::ios::sync_with_stdio(true);
 
 	signal(SIGINT, signal_handler);
